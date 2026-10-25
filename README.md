@@ -12,17 +12,52 @@ The same code works with Firebase Remote Config, an HTTP JSON file, or any
 function that returns a map. There is no dependency on Bloc, Provider, GetIt or
 a router. Supports Android and iOS.
 
-## Install
+## Quick start: two commands
 
 ```sh
 flutter pub add adaptable_remote_config
+dart run adaptable_remote_config
 ```
 
-or in `pubspec.yaml`:
+The second command is an interactive setup. Use the arrow keys, space and Enter
+to answer a few questions (where the values live, force and/or optional updates,
+platforms, key names). It then:
+
+- writes `lib/app_update.dart` with a ready controller,
+- wraps your `MaterialApp` in `UpdateGate` and initializes Firebase in `main()`
+  (it shows what it will change and asks first),
+- runs `flutter pub add firebase_core` if you chose Firebase and it is missing,
+- prints the exact parameters to create in the Firebase console, or the JSON to
+  host.
+
+Your app already works with the defaults it writes; the remote values let you
+change behavior later without a release. Run it from the app's root folder.
+
+**No questions at all:**
+
+```sh
+dart run adaptable_remote_config --yes
+```
+
+Firebase, force + optional, Android + iOS, standard key names. Flags change the
+defaults without prompts:
+
+```sh
+dart run adaptable_remote_config --yes --source http --url https://example.com/app.json
+dart run adaptable_remote_config --yes --mode force      # both | force | optional
+```
+
+For Firebase, run `flutterfire configure` once so the app can reach your
+project. If the wizard cannot safely edit a file (for example your `MaterialApp`
+already has a `builder:`), it leaves it alone and prints the few lines to add.
+
+## Manual setup
+
+If you prefer to do it by hand, or want to understand what the wizard writes:
 
 ```yaml
 dependencies:
-  adaptable_remote_config: ^0.2.0
+  adaptable_remote_config: ^0.3.0
 ```
 
 ```dart
@@ -33,7 +68,7 @@ The package depends on `firebase_remote_config` even when you use another
 provider, so Firebase code is only compiled in, never started, unless you use
 `FirebaseConfigProvider`.
 
-## Quick start (three steps)
+### Three steps
 
 ```dart
 Future<void> main() async {

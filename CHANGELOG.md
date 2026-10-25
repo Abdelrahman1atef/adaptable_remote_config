@@ -1,3 +1,15 @@
+## 0.3.0
+
+- New setup wizard: `dart run adaptable_remote_config`. Arrow-key questions
+  (source, force/optional, platforms, key names), then it writes
+  `lib/app_update.dart`, wraps `MaterialApp` in `UpdateGate`, initializes
+  Firebase in `main()`, adds `firebase_core`, and prints the console parameters
+  or the JSON to host. Edits are previewed and confirmed, are skipped when the
+  file is not safe to change, and are idempotent.
+- `--yes` runs it with no questions; `--source`, `--mode`, `--url`, `--dir` and
+  `--out` set answers from the command line.
+- No change to the runtime API.
+
 ## 0.2.1
 
 - README: pub.dev install instructions, a complete Firebase and HTTP quick

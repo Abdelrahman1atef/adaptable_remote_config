@@ -1,6 +1,6 @@
 name: adaptable_remote_config
 description: Firebase, HTTP, or custom remote config for Flutter as plain key/value pairs, with typed reads, a cached last-good snapshot, and optional/required app-update gates.
-version: 0.2.1
+version: 0.3.0
 repository: https://github.com/Abdelrahman1atef/adaptable_remote_config
 issue_tracker: https://github.com/Abdelrahman1atef/adaptable_remote_config/issues
 topics:
@@ -12,6 +12,8 @@ topics:
 platforms:
   android:
   ios:
+executables:
+  adaptable_remote_config:
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
