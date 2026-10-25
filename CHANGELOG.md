@@ -1,3 +1,18 @@
+## 0.4.0
+
+- The wizard can now create the Remote Config parameters for you, so there is
+  nothing to click in the Firebase console. It uses the Firebase CLI login that
+  `flutterfire configure` already needs (no service-account key). It reads the
+  live template, shows exactly which parameters it will add, asks, publishes,
+  then re-reads to verify.
+- Safe by construction: parameters that already exist (at the top level or in
+  a folder) are never changed or removed; it refuses to publish if the live
+  template changed while it was running; with `--yes` nothing is written to
+  Firebase unless you also pass `--publish`.
+- New flags: `--publish`, `--no-publish`, `--project <id>`. The project id is
+  read from `lib/firebase_options.dart` or `.firebaserc`.
+- Without the Firebase CLI it prints the parameters to create, as before.
+
 ## 0.3.2
 
 - The wizard no longer clobbers an app that is already set up. It stops when

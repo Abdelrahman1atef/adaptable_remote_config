@@ -4,6 +4,7 @@ import 'answers.dart';
 import 'generator.dart';
 import 'patcher.dart';
 import 'prompter.dart';
+import 'remote_config_publisher.dart';
 
 const _usage = '''
 Sets up remote-controlled app updates (force / optional) in this Flutter app.
@@ -14,6 +15,9 @@ Usage: dart run adaptable_remote_config [options]
   --source <name>    firebase | http | custom
   --mode <name>      both | force | optional
   --url <url>        JSON file URL (with --source http)
+  --publish          Create the Remote Config parameters in Firebase without asking
+  --no-publish       Only print the parameters to create
+  --project <id>     Firebase project id (default: read from firebase_options.dart)
   --dir <path>       Flutter project to set up (default: current directory)
   --out <path>       Generated file (default: lib/app_update.dart)
   -h, --help         Show this help
@@ -75,6 +79,7 @@ int runCli(
   Prompter? prompter,
   StringSink? out,
   AddDependency addDependency = _flutterPubAdd,
+  RemoteConfigPublisher? publisher,
 }) {
   final sink = out ?? stdout;
   String? dir;
@@ -82,6 +87,8 @@ int runCli(
   String? source;
   String? mode;
   String? url;
+  String? project;
+  bool? publish;
   var yes = false;
   for (var i = 0; i < args.length; i++) {
     final arg = args[i];
@@ -99,6 +106,12 @@ int runCli(
       source = args[++i];
     } else if (arg == '--mode' && hasValue) {
       mode = args[++i];
+    } else if (arg == '--publish') {
+      publish = true;
+    } else if (arg == '--no-publish') {
+      publish = false;
+    } else if (arg == '--project' && hasValue) {
+      project = args[++i];
     } else if (arg == '--url' && hasValue) {
       url = args[++i];
     } else {
@@ -120,6 +133,9 @@ int runCli(
       ),
       addDependency: addDependency,
       yes: yes,
+      publisher: publisher ?? RemoteConfigPublisher(),
+      projectId: project,
+      publish: publish,
     );
   } on SetupAbort catch (e) {
     sink.writeln(e.message);
@@ -160,6 +176,9 @@ int runSetup(
   SetupPreset preset = const SetupPreset(),
   AddDependency addDependency = _flutterPubAdd,
   bool yes = false,
+  RemoteConfigPublisher? publisher,
+  String? projectId,
+  bool? publish,
 }) {
   final pubspec = File('${projectDir.path}/pubspec.yaml');
   if (!pubspec.existsSync()) {
@@ -239,12 +258,77 @@ int runSetup(
     gateDone: done(_Kind.gate),
   );
   if (left.isNotEmpty) out.writeln('\nStill to do by hand:\n\n$left');
-  out.writeln('\n${remoteValuesGuide(answers)}');
+  final published = answers.source == ConfigSource.firebase &&
+      publish != false &&
+      _publishParameters(
+        ask,
+        out,
+        answers,
+        publisher ?? RemoteConfigPublisher(),
+        projectId ?? readFirebaseProjectId(projectDir),
+        alwaysYes: publish == true,
+        interactive: !yes,
+      );
+  if (!published) out.writeln('\n${remoteValuesGuide(answers)}');
   out.writeln(
     'The app already works with the defaults in lib/app_update.dart; the '
     'values above let you change it later without a release.',
   );
   return 0;
+}
+
+/// Adds the missing parameters to the Firebase project. Returns true when the
+/// project has them all afterwards (so the manual guide is not needed).
+bool _publishParameters(
+  Prompter ask,
+  StringSink out,
+  SetupAnswers answers,
+  RemoteConfigPublisher publisher,
+  String? projectId, {
+  required bool alwaysYes,
+  required bool interactive,
+}) {
+  // Writing to a live project is opt-in when there are no questions.
+  if (!interactive && !alwaysYes) return false;
+  if (projectId == null) {
+    out.writeln('\n  No Firebase project found (run `flutterfire configure`, or pass --project).');
+    return false;
+  }
+  if (!publisher.isAvailable) {
+    out.writeln('\n  Firebase CLI not found, so the parameters are listed below instead.');
+    out.writeln('  Install it with `npm i -g firebase-tools`, then `firebase login`.');
+    return false;
+  }
+  try {
+    final current = publisher.fetch(projectId);
+    final merge = mergeParameters(current, answers.parameters);
+    if (merge.added.isEmpty) {
+      out.writeln('\n+ Remote Config in "$projectId" already has every parameter.');
+      return true;
+    }
+    out.writeln('\nRemote Config in "$projectId" will get these new parameters:');
+    for (final spec in merge.added) {
+      out.writeln('  + ${spec.name} = ${spec.example.isEmpty ? '(empty)' : spec.example}');
+    }
+    if (merge.existing.isNotEmpty) {
+      out.writeln('  (already there, left as they are: ${merge.existing.join(', ')})');
+    }
+    if (!alwaysYes &&
+        !ask.confirm('Publish these to Firebase now?', defaultValue: true)) {
+      return false;
+    }
+    publisher.publish(projectId, merge.template, basedOn: current);
+    final after = mergeParameters(publisher.fetch(projectId), answers.parameters);
+    if (after.added.isNotEmpty) {
+      out.writeln('! Published, but ${after.added.map((s) => s.name).join(', ')} still missing.');
+      return false;
+    }
+    out.writeln('+ Published ${merge.added.length} parameter(s) to "$projectId".');
+    return true;
+  } on PublishException catch (e) {
+    out.writeln('! ${e.message}');
+    return false;
+  }
 }
 
 enum _Kind { gate, firebase }

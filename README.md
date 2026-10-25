@@ -27,8 +27,8 @@ platforms, key names). It then:
 - wraps your `MaterialApp` in `UpdateGate` and initializes Firebase in `main()`
   (it shows what it will change and asks first),
 - runs `flutter pub add firebase_core` if you chose Firebase and it is missing,
-- prints the exact parameters to create in the Firebase console, or the JSON to
-  host.
+- creates the parameters in your Firebase project for you (it shows what it will
+  add, asks first, and never changes existing ones), or prints the JSON to host.
 
 Your app already works with the defaults it writes; the remote values let you
 change behavior later without a release. Run it from the app's root folder.
@@ -48,7 +48,17 @@ dart run adaptable_remote_config --yes --mode force      # both | force | option
 ```
 
 For Firebase, run `flutterfire configure` once so the app can reach your
-project. If the wizard cannot safely edit a file (for example your `MaterialApp`
+project. The same login lets the wizard create the Remote Config parameters
+(it needs the [Firebase CLI](https://firebase.google.com/docs/cli): `npm i -g
+firebase-tools`, then `firebase login`). With `--yes` it only writes to your
+Firebase project when you add `--publish`:
+
+```sh
+dart run adaptable_remote_config --yes --publish            # do everything
+dart run adaptable_remote_config --yes --no-publish         # just print the parameters
+dart run adaptable_remote_config --publish --project my-id  # pick the project
+```
+ If the wizard cannot safely edit a file (for example your `MaterialApp`
 already has a `builder:`), it leaves it alone and prints the few lines to add.
 
 ## Manual setup
