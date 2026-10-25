@@ -1,0 +1,39 @@
+name: Publish to pub.dev
+
+# Release: bump `version` in pubspec.yaml and CHANGELOG.md, merge to main, then
+#   git tag v0.2.2 && git push origin v0.2.2
+# The tag must match `version` and the tag pattern set on pub.dev
+# (Admin -> Automated publishing -> `v{{version}}`).
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC token for pub.dev; no stored secret needed
+    steps:
+      - uses: actions/checkout@v4
+
+      # Configures the pub.dev OIDC token that `pub publish` picks up.
+      - uses: dart-lang/setup-dart@v1
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Test
+        run: flutter test --no-pub
+
+      - name: Publish
+        run: flutter pub publish --force
