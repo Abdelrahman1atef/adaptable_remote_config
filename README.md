@@ -1,5 +1,7 @@
 # adaptable_remote_config
 
+[![pub package](https://img.shields.io/pub/v/adaptable_remote_config.svg)](https://pub.dev/packages/adaptable_remote_config)
+
 Remote settings and app-update gating for Flutter, built on one idea:
 
 > A **provider** returns key/value pairs. **`UpdateKeys`** says which keys mean
@@ -10,33 +12,82 @@ The same code works with Firebase Remote Config, an HTTP JSON file, or any
 function that returns a map. There is no dependency on Bloc, Provider, GetIt or
 a router. Supports Android and iOS.
 
-## Setup (three steps)
+## Install
+
+```sh
+flutter pub add adaptable_remote_config
+```
+
+or in `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  adaptable_remote_config:
-    path: packages/adaptable_remote_config
+  adaptable_remote_config: ^0.2.0
 ```
 
 ```dart
-// 1. A controller: a source + an id for the cache.
-final updates = RemoteConfigController(
-  appId: 'my_app',
-  provider: FirebaseConfigProvider(),            // initialize Firebase first
-);
-
-// 2. Wrap the app. Put it in the builder, above every route.
-MaterialApp.router(
-  builder: (context, child) => UpdateGate(controller: updates, child: child!),
-);
-
-// 3. Dispose it when its owner ends.
-updates.dispose();
+import 'package:adaptable_remote_config/adaptable_remote_config.dart';
 ```
 
-That's all for the default keys (`android_version`, `ios_version`,
-`android_store_link`, `ios_store_link`, `force_update`, and optionally
-`android_latest_version`, `ios_latest_version`).
+The package depends on `firebase_remote_config` even when you use another
+provider, so Firebase code is only compiled in, never started, unless you use
+`FirebaseConfigProvider`.
+
+## Quick start (three steps)
+
+```dart
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();      // only for FirebaseConfigProvider
+
+  // 1. A controller: a source + an id for the cache.
+  final updates = RemoteConfigController(
+    appId: 'my_app',
+    provider: FirebaseConfigProvider(),
+  );
+
+  runApp(MyApp(updates: updates));
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key, required this.updates});
+  final RemoteConfigController updates;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    routerConfig: router,
+    // 2. Wrap the app. Put it in the builder, above every route.
+    builder: (context, child) =>
+        UpdateGate(controller: updates, child: child!),
+  );
+}
+
+// 3. Call updates.dispose() when its owner ends.
+```
+
+Without Firebase, use a JSON file you host instead:
+
+```dart
+provider: HttpConfigProvider(url: Uri.parse('https://example.com/my_app.json')),
+keys: const UpdateKeys.nested(),
+```
+
+```json
+{
+  "android": {"minimum_version": "1.2.0+4", "latest_version": "1.3.0+1",
+              "force_update": true,
+              "store_url": "https://play.google.com/store/apps/details?id=com.example.app"},
+  "ios":     {"minimum_version": "1.2.0+4", "force_update": true,
+              "store_url": "https://apps.apple.com/app/id123456789"},
+  "base_url": "https://api.example.com"
+}
+```
+
+With Firebase and the default keys, create these parameters in the console:
+`android_version`, `ios_version`, `android_store_link`, `ios_store_link`,
+`force_update` (a boolean for both platforms), and optionally
+`android_latest_version` and `ios_latest_version` for soft updates. Versions look
+like `1.2.0` or `1.2.0+4` (version plus build number).
 
 ## Choose where the values come from
 
@@ -151,7 +202,11 @@ reaching it.
 `appInfo:` and `platform:` can be injected (tests, other environments).
 `storage:` swaps the SharedPreferences cache (`MemoryConfigStorage` for tests).
 
-## Tests
+## Contributing
+
+Issues and pull requests are welcome at
+[github.com/Abdelrahman1atef/adaptable_remote_config](https://github.com/Abdelrahman1atef/adaptable_remote_config).
+Run the checks from the package directory:
 
 ```sh
 flutter pub get

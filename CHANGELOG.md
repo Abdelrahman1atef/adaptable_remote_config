@@ -1,3 +1,8 @@
+## 0.2.1
+
+- README: pub.dev install instructions, a complete Firebase and HTTP quick
+  start, and the Remote Config parameters to create. No code changes.
+
 ## 0.2.0
 
 A simplification. Providers now return a plain key/value map and everything
