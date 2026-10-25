@@ -1,3 +1,11 @@
+## 0.3.1
+
+- Fix the setup wizard on Windows: arrow keys did not move the menu and the
+  first run could crash with "Error setting terminal echo mode (errno 87)".
+  The wizard now sets the Windows console input mode directly (adds the `ffi`
+  dependency). If raw keyboard input is not available it falls back to numbered
+  questions instead of failing. Verified in a real Windows console.
+
 ## 0.3.0
 
 - New setup wizard: `dart run adaptable_remote_config`. Arrow-key questions

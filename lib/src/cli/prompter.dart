@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'windows_console.dart';
+
 /// One selectable option.
 class Choice<T> {
   const Choice(this.label, this.value, {this.hint = ''});
@@ -62,9 +64,7 @@ class TerminalPrompter implements Prompter {
 
   @override
   T select<T>(String question, List<Choice<T>> options, {int initial = 0}) {
-    final picked = _interactive
-        ? _pick(question, options, {initial}, multi: false)
-        : _numbered(question, options, {initial}, multi: false);
+    final picked = _choose(question, options, {initial}, multi: false);
     return options[picked.first].value;
   }
 
@@ -78,9 +78,7 @@ class TerminalPrompter implements Prompter {
       for (var i = 0; i < options.length; i++)
         if (initial.contains(options[i].value)) i,
     };
-    final picked = _interactive
-        ? _pick(question, options, start, multi: true)
-        : _numbered(question, options, start, multi: true);
+    final picked = _choose(question, options, start, multi: true);
     return [for (final i in picked) options[i].value];
   }
 
@@ -119,7 +117,8 @@ class TerminalPrompter implements Prompter {
   List<int> _pick<T>(
     String question,
     List<Choice<T>> options,
-    Set<int> start, {
+    Set<int> start,
+    void Function() restore, {
     required bool multi,
   }) {
     var cursor = start.isEmpty ? 0 : start.first;
@@ -140,12 +139,6 @@ class TerminalPrompter implements Prompter {
       drawn = options.length + 1;
     }
 
-    final echo = _real ? stdin.echoMode : false;
-    final lineMode = _real ? stdin.lineMode : false;
-    if (_real) {
-      stdin.echoMode = false;
-      stdin.lineMode = false;
-    }
     try {
       draw();
       while (true) {
@@ -166,10 +159,7 @@ class TerminalPrompter implements Prompter {
             );
             return chosen.toList()..sort();
           case _Key.abort:
-            if (_real) {
-              stdin.echoMode = echo;
-              stdin.lineMode = lineMode;
-            }
+            restore();
             _abort();
           case _Key.other:
             break;
@@ -177,10 +167,49 @@ class TerminalPrompter implements Prompter {
         draw();
       }
     } finally {
-      if (_real) {
-        stdin.echoMode = echo;
-        stdin.lineMode = lineMode;
+      restore();
+    }
+  }
+
+  /// Arrow-key menu when raw keyboard input is available, numbered otherwise.
+  List<int> _choose<T>(
+    String question,
+    List<Choice<T>> options,
+    Set<int> start, {
+    required bool multi,
+  }) {
+    if (_interactive) {
+      final restore = _enterRaw();
+      if (restore != null) {
+        return _pick(question, options, start, restore, multi: multi);
       }
+    }
+    return _numbered(question, options, start, multi: multi);
+  }
+
+  /// Turns off line buffering and echo so single key presses can be read.
+  /// Returns the function that undoes it, or null when that is not possible.
+  void Function()? _enterRaw() {
+    if (!_real) return () {};
+    if (Platform.isWindows) return WindowsConsoleMode.enterRaw()?.restore;
+    final echo = stdin.echoMode;
+    final line = stdin.lineMode;
+    void restore() {
+      stdin.echoMode = echo;
+      stdin.lineMode = line;
+    }
+
+    try {
+      stdin.echoMode = false;
+      stdin.lineMode = false;
+      return restore;
+    } on StdinException {
+      try {
+        restore();
+      } on StdinException {
+        // Nothing more can be done.
+      }
+      return null;
     }
   }
 

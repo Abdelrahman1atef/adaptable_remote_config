@@ -1,4 +1,5 @@
 import 'package:adaptable_remote_config/src/cli/prompter.dart';
+import 'package:adaptable_remote_config/src/cli/windows_console.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _esc = 27;
@@ -83,6 +84,14 @@ void main() {
       initial: const {'a'},
     );
     expect(picked, ['i']);
+  });
+
+  test('Windows raw mode never throws when stdin is not a console', () {
+    // Under `flutter test` stdin is a pipe: enterRaw must say "no", not crash,
+    // so the wizard falls back to numbered input instead of an exception.
+    final mode = WindowsConsoleMode.enterRaw();
+    mode?.restore();
+    expect(mode, isNull);
   });
 
   test('Ctrl-C and end of input cancel', () {
