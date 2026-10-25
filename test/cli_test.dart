@@ -392,6 +392,59 @@ void main() {
       expect(out.toString(), isNot(contains('Still to do by hand')));
     });
 
+    test('stops when the app already creates a RemoteConfigController', () {
+      File('${dir.path}/lib/core/config/app_update.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('final c = RemoteConfigController(appId: "x");');
+      File('${dir.path}/lib/main.dart').writeAsStringSync(_stockMain);
+      final out = StringBuffer();
+      expect(runCli(['--yes', '--dir', dir.path], out: out), 0);
+      expect(out.toString(), contains('already sets this up'));
+      expect(File('${dir.path}/lib/app_update.dart').existsSync(), false);
+      expect(File('${dir.path}/lib/main.dart').readAsStringSync(), _stockMain);
+    });
+
+    test('does not add a second Firebase.initializeApp', () {
+      File('${dir.path}/lib/core/boot.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('Future<void> go() => Firebase.initializeApp();');
+      File('${dir.path}/lib/main.dart').writeAsStringSync(_stockMain);
+      final out = StringBuffer();
+      expect(
+        runCli(['--yes', '--dir', dir.path], out: out, addDependency: (_, _) => true),
+        0,
+      );
+      final main = File('${dir.path}/lib/main.dart').readAsStringSync();
+      expect(main, isNot(contains('Firebase.initializeApp')));
+      expect(main, contains('UpdateGate('));
+      expect(out.toString(), isNot(contains('Initialize Firebase')));
+    });
+
+    test('uses relative imports when the project does', () {
+      File('${dir.path}/lib/src/app.dart')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          "import '../core/theme.dart';\n$_stockMain",
+        );
+      final out = StringBuffer();
+      expect(
+        runCli(
+          ['--yes', '--dir', dir.path, '--source', 'custom'],
+          out: out,
+        ),
+        0,
+      );
+      final app = File('${dir.path}/lib/src/app.dart').readAsStringSync();
+      expect(app, contains("import '../app_update.dart';"));
+      expect(app, isNot(contains('package:shop_app/app_update.dart')));
+    });
+
+    test('relative import paths are computed from the importing file', () {
+      expect(relativeImport('lib/main.dart', 'lib/app_update.dart'), 'app_update.dart');
+      expect(relativeImport('lib/src/app.dart', 'lib/app_update.dart'), '../app_update.dart');
+      expect(relativeImport('lib/a/b/c.dart', 'lib/a/x.dart'), '../x.dart');
+    });
+
     test('--yes with http needs a url, and accepts flags', () {
       File('${dir.path}/pubspec.yaml').writeAsStringSync('name: shop_app\n');
       final out = StringBuffer();

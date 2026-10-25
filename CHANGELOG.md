@@ -1,3 +1,13 @@
+## 0.3.2
+
+- The wizard no longer clobbers an app that is already set up. It stops when
+  any file creates a `RemoteConfigController`, and it never adds a second
+  `Firebase.initializeApp` when one exists anywhere in `lib/` (apps that start
+  Firebase late on purpose, or tolerate a missing `firebase_options.dart`, were
+  being moved onto the boot path and could crash).
+- Imports follow the project's style: relative when the file already imports
+  its own code that way, `package:` otherwise.
+
 ## 0.3.1
 
 - Fix the setup wizard on Windows: arrow keys did not move the menu and the

@@ -172,6 +172,20 @@ int runSetup(
   final appName = name?.group(1) ?? 'my_app';
 
   out.writeln('\nadaptable_remote_config setup\n');
+  final existing = _firstFileWith(
+    projectDir,
+    'RemoteConfigController(',
+    skip: outputPath ?? 'lib/app_update.dart',
+  );
+  if (existing != null &&
+      !ask.confirm(
+        'This app already creates a RemoteConfigController ($existing). '
+        'Set it up again anyway?',
+        defaultValue: false,
+      )) {
+    out.writeln('Nothing changed: $existing already sets this up.');
+    return 0;
+  }
   final answers = _collect(
     ask,
     appName,
@@ -252,29 +266,54 @@ List<_Edit> _planEdits(
   final texts = <String, String>{};
   String read(String path) => texts[path] ??= File('${project.path}/$path').readAsStringSync();
   final edits = <_Edit>[];
-  final gateImports = [
-    "import 'package:adaptable_remote_config/adaptable_remote_config.dart';",
-    "import '$importPath';",
-  ];
+  /// `package:` style, or relative when the file already imports that way
+  /// (many projects forbid `package:` imports for their own code).
+  String localImport(String from, String to, String packagePath) =>
+      _usesRelativeImports(read(from))
+      ? "import '${relativeImport(from, to)}';"
+      : "import '$packagePath';";
 
   final appPath = _findAppFile(project);
   if (appPath != null) {
     final result = wrapAppWithGate(
       read(appPath),
-      imports: gateImports,
+      imports: [
+        "import 'package:adaptable_remote_config/adaptable_remote_config.dart';",
+        localImport(appPath, a.outputPath, importPath),
+      ],
       showOptional: a.usesOptional,
     );
     if (result.changed) texts[appPath] = result.source!;
     edits.add(_Edit(_Kind.gate, appPath, result));
   }
 
-  if (a.source == ConfigSource.firebase && File('${project.path}/lib/main.dart').existsSync()) {
+  final initializedIn = _firstFileWith(project, 'Firebase.initializeApp');
+  if (a.source == ConfigSource.firebase && initializedIn != null) {
+    // Adding a second call would run Firebase setup twice and, in apps that
+    // start it late on purpose, put it back on the boot path.
+    edits.add(
+      _Edit(
+        _Kind.firebase,
+        initializedIn,
+        PatchResult.skipped(
+          'Firebase is already initialized in $initializedIn',
+          alreadyDone: true,
+        ),
+      ),
+    );
+  } else if (a.source == ConfigSource.firebase &&
+      File('${project.path}/lib/main.dart').existsSync()) {
     final hasOptions = File('${project.path}/lib/firebase_options.dart').existsSync();
     final result = initFirebaseInMain(
       read('lib/main.dart'),
       imports: [
         "import 'package:firebase_core/firebase_core.dart';",
-        if (hasOptions) "import 'package:$appName/firebase_options.dart';",
+        if (hasOptions)
+          localImport(
+            'lib/main.dart',
+            'lib/firebase_options.dart',
+            'package:$appName/firebase_options.dart',
+          ),
       ],
       withOptions: hasOptions,
     );
@@ -293,6 +332,49 @@ List<_Edit> _planEdits(
             : e.result,
       ),
   ];
+}
+
+/// Every Dart file under lib/, as `lib/...` paths with forward slashes.
+List<String> _dartFiles(Directory project) {
+  final lib = Directory('${project.path}/lib');
+  if (!lib.existsSync()) return const [];
+  final root = project.path.replaceAll('\\', '/');
+  return [
+    for (final f in lib.listSync(recursive: true).whereType<File>())
+      if (f.path.endsWith('.dart'))
+        f.path.replaceAll('\\', '/').substring(root.length + 1),
+  ];
+}
+
+/// The first lib/ file whose text contains [pattern] (ignoring [skip]).
+String? _firstFileWith(Directory project, Pattern pattern, {String? skip}) {
+  for (final path in _dartFiles(project)) {
+    if (path == skip || path.endsWith('.g.dart')) continue;
+    if (File('${project.path}/$path').readAsStringSync().contains(pattern)) {
+      return path;
+    }
+  }
+  return null;
+}
+
+/// True when the file imports its own project's code with relative paths.
+bool _usesRelativeImports(String source) =>
+    RegExp(r"^import '(?!package:|dart:)", multiLine: true).hasMatch(source);
+
+/// `app_update.dart`, `../core/x.dart`... from file [from] to file [to].
+String relativeImport(String from, String to) {
+  final fromDirs = from.split('/')..removeLast();
+  final toParts = to.split('/');
+  var shared = 0;
+  while (shared < fromDirs.length &&
+      shared < toParts.length - 1 &&
+      fromDirs[shared] == toParts[shared]) {
+    shared++;
+  }
+  return [
+    for (var i = shared; i < fromDirs.length; i++) '..',
+    ...toParts.skip(shared),
+  ].join('/');
 }
 
 /// The file holding the app widget, preferring main.dart and app.dart.
