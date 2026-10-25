@@ -1,0 +1,23 @@
+# Build, tooling, credentials, and local verification state.
+.dart_tool/
+.tool-home/
+build/
+.flutter-plugins*
+pubspec.lock
+example/.dart_tool/
+example/build/
+example/pubspec.lock
+example/android/
+example/ios/
+example/linux/
+example/macos/
+example/web/
+example/windows/
+example/test/
+*.log
+*.dill
+
+# Workspace-specific integration and release administration.
+VERIFICATION.md
+PUBLISHING.md
+release/
