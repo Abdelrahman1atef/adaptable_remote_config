@@ -40,6 +40,10 @@ Three things are involved:
 If the app cannot reach the source (no internet), it uses the last values it saved.
 If there is nothing saved, it lets the user in. **It never blocks users by mistake.**
 
+> **Not sure what a value will do?** See the
+> [decision table](#what-will-the-user-see-the-decision-table): it shows, for every
+> combination of values, what the user will see.
+
 ---
 
 ## Step 0: Pick your method
@@ -207,6 +211,8 @@ Press **Publish changes**. (The setup tool can create all of these for you.)
 
 ## Test it
 
+(What will each value do? See the [decision table](#what-will-the-user-see-the-decision-table).)
+
 | I want to... | Set this in Firebase, then Publish changes |
 | --- | --- |
 | See the **optional dialog** | `android_latest_version` = a number **higher** than your installed version, e.g. `9.0.0+1` |
@@ -360,6 +366,8 @@ MaterialApp(
 
 ## Test it
 
+(What will each value do? See the [decision table](#what-will-the-user-see-the-decision-table).)
+
 Edit the file on your server:
 
 - **Optional dialog:** set `latest_version` to `9.0.0+1`.
@@ -425,6 +433,8 @@ the saved values). These names are the default names. You can use your own names
 
 ## Test it
 
+(What will each value do? See the [decision table](#what-will-the-user-see-the-decision-table).)
+
 Make your API return a higher `android_version` with `force_update: true`, or a higher
 `android_latest_version`. Close the app and open it again.
 
@@ -432,18 +442,102 @@ Make your API return a higher `android_version` with `force_update: true`, or a 
 
 # Good to know
 
-## What the user sees
+## What will the user see? (the decision table)
 
-| Your values | Installed app | The user sees |
+The app asks **three questions, in this order**. It stops at the first "yes".
+Only one thing is ever shown.
+
+```
+ 1. Is force_update ON, and is the installed app OLDER than the minimum version?
+        yes  →  WALL      (full screen, cannot be closed)
+ 2. Is the installed app OLDER than the latest version?
+        yes  →  DIALOG    (small box, the user can say Later)
+ 3. Otherwise
+             →  NOTHING
+```
+
+"Installed app" is the version in your `pubspec.yaml`, for example `1.2.0+4`.
+"Minimum" is `android_version` / `ios_version`. "Latest" is `android_latest_version` /
+`ios_latest_version`.
+
+### Table 1: the normal cases (installed app is `1.2.0+4`)
+
+| # | `force_update` | Minimum | Latest | The user sees | Why |
+| --- | --- | --- | --- | --- | --- |
+| 1 | off | *(empty)* | *(empty)* | **Nothing** | Nothing is set |
+| 2 | off | `2.0.0` | *(empty)* | **Nothing** | The minimum only counts when `force_update` is **on** |
+| 3 | **ON** | `2.0.0` | *(empty)* | **WALL** | Installed is older than the minimum |
+| 4 | **ON** | `1.2.0+4` or lower | *(empty)* | **Nothing** | Installed meets the minimum |
+| 5 | **ON** | *(empty)* | *(empty)* | **Nothing** | No minimum, so nothing to enforce |
+| 6 | off | *(empty)* | `2.0.0` | **DIALOG** | Installed is older than the latest |
+| 7 | off | *(empty)* | `1.2.0+4` or lower | **Nothing** | Installed is up to date |
+| 8 | **ON** | `2.0.0` | `3.0.0` | **WALL** | The wall wins over the dialog |
+| 9 | **ON** | `1.0.0` | `2.0.0` | **DIALOG** | Meets the minimum, but older than the latest |
+| 10 | off | `2.0.0` | `3.0.0` | **DIALOG** | Force is off, so the minimum is ignored; the latest decides |
+
+Quick way to remember it:
+
+- **Want the wall?** `force_update` = on **and** minimum higher than the installed app.
+- **Want the dialog?** `latest` higher than the installed app.
+- **Want to turn everything off?** Put `force_update` = off and set both versions to
+  `1.0.0+1` (or empty).
+
+### Table 2: mistakes are ignored, never shown
+
+If a value is wrong, the app **ignores the whole change** and keeps the last good values.
+A typo can never lock your users out.
+
+| # | What you set | What happens |
 | --- | --- | --- |
-| `force_update` = true, minimum version is **higher** than installed | too old | **Wall.** Cannot continue. Only an *Update* button. |
-| Latest version is **higher** than installed | a bit old | **Dialog** with *Update*, *Later*, *Skip this version* |
-| Installed is equal or newer | up to date | Nothing |
+| 11 | Minimum is **higher** than latest (for example min `3.0.0`, latest `2.0.0`) | Ignored. Nothing new is shown. |
+| 12 | A version like `abc`, `v2`, `1.2.0-beta`, `2.0.` or `1..0` | Ignored. Use only `1.2.3` or `1.2.3+4`. |
+| 13 | A version that is empty or only spaces | Counts as "not set" (not a mistake) |
 
-- *Later* hides the dialog for one day. *Skip this version* hides it for that version only.
-- The wall can never be dismissed.
-- The *Update* button opens the store link. On Android, an empty link is fine: the app
-  builds the Play Store link from your package name. On iOS you **must** set a link.
+### Table 3: the store link (the *Update* button)
+
+The link is checked **only when a wall or dialog is about to show**.
+
+| # | Platform | Store link | What happens |
+| --- | --- | --- | --- |
+| 14 | Android | empty | **Works.** The app builds the Play Store link from your package name. |
+| 15 | iOS | empty, and an update is due | **Nothing is shown.** The change is ignored because the button would have nowhere to go. Always set `ios_store_link`. |
+| 16 | iOS | empty, and no update is due | Nothing to show, nothing wrong |
+| 17 | any | `www.example.com`, `example.com` (no `https://`) | Ignored. The link must start with `https://`. |
+| 18 | any | `https://...`, `http://...`, `market://details?id=...`, `itms-apps://...` | **Works.** |
+
+### Table 4: which platform reads which values
+
+| Device | Reads | Notes |
+| --- | --- | --- |
+| Android phone | `android_version`, `android_latest_version`, `android_store_link` | `force_update` is shared by both phones |
+| iPhone | `ios_version`, `ios_latest_version`, `ios_store_link` | Same shared `force_update` |
+| Web, Windows, Mac, Linux | nothing | They are never asked to update |
+
+(With a prefix, the names start with it, for example `customer_android_version`. With
+`UpdateKeys.nested()`, each platform has its own `force_update`.)
+
+### Table 5: what the user can do
+
+| Screen | Buttons | What each does |
+| --- | --- | --- |
+| **WALL** | *Update* only | Opens the store. The back button does nothing. It cannot be closed. It goes away only after the user installs the new version. |
+| **DIALOG** | *Update* | Opens the store |
+| | *Later* (or tap outside the box) | Hides the dialog for **one day**, then it comes back |
+| | *Skip this version* | Hides it for **this latest version** for good. A **newer** latest version shows it again right away. |
+
+*Later* and *Skip* never hide the **wall**.
+
+### Table 6: when does the user get your change?
+
+| Situation | What happens |
+| --- | --- |
+| The app starts | It reads your values. It waits at most **4 seconds**. If the network is slow, the app opens anyway and the wall or dialog appears when the values arrive. |
+| The app comes back to the screen after **1 hour or more** | It reads again |
+| **Firebase** | Firebase keeps a copy for up to **1 hour** on release apps, so a change can take up to an hour. (Debug builds can fetch every time.) |
+| An app that is already open | Do not rely on it. Close the app and open it again to see the change. |
+| No internet | The app uses the **last values it saved** |
+| It never got any values | It uses your `defaults` (which show nothing) |
+| Your change has a mistake (Table 2) | Ignored. The last good values stay. |
 
 ## Version format
 

@@ -1,3 +1,11 @@
+## 0.5.1
+
+- README: a decision table that shows, for every combination of `force_update`,
+  minimum and latest version, what the user sees (wall, dialog or nothing), and
+  what happens with mistakes, store links, platforms and timing. Every row is
+  checked by `test/decision_table_test.dart`, so the table cannot drift from the
+  real behavior. No code changes.
+
 ## 0.5.0
 
 - Several apps in one Firebase project: `--prefix <name>` names the keys
