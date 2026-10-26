@@ -57,6 +57,7 @@ class SetupAnswers {
     this.androidStoreUrl = '',
     this.iosStoreUrl = '',
     this.outputPath = 'lib/app_update.dart',
+    this.group = '',
   });
 
   final String appId;
@@ -70,6 +71,9 @@ class SetupAnswers {
   final String androidStoreUrl;
   final String iosStoreUrl;
   final String outputPath;
+
+  /// Firebase console folder (parameter group) for the keys; empty for none.
+  final String group;
 
   List<String> get platforms => [if (android) 'android', if (ios) 'ios'];
 

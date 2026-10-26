@@ -44,8 +44,9 @@ class TemplateMerge {
 /// parameter that already exists, wherever it lives (top level or a folder).
 TemplateMerge mergeParameters(
   Map<String, dynamic> current,
-  List<ParamSpec> wanted,
-) {
+  List<ParamSpec> wanted, {
+  String group = '',
+}) {
   final template = jsonDecode(jsonEncode(current)) as Map<String, dynamic>;
   final parameters =
       (template['parameters'] ??= <String, dynamic>{}) as Map<String, dynamic>;
@@ -57,6 +58,18 @@ TemplateMerge mergeParameters(
               {})
           .keys,
   };
+  // New keys go in the folder [group] when one is given, else at the top.
+  final target = group.isEmpty
+      ? parameters
+      : (((template['parameterGroups'] ??= <String, dynamic>{})
+                        as Map<String, dynamic>)
+                    .putIfAbsent(
+                      group,
+                      () => <String, dynamic>{'parameters': <String, dynamic>{}},
+                    )
+                as Map<String, dynamic>)
+            .putIfAbsent('parameters', () => <String, dynamic>{})
+          as Map<String, dynamic>;
   final added = <ParamSpec>[];
   final existing = <String>[];
   for (final spec in wanted) {
@@ -64,7 +77,7 @@ TemplateMerge mergeParameters(
       existing.add(spec.name);
       continue;
     }
-    parameters[spec.name] = {
+    target[spec.name] = {
       'defaultValue': {'value': spec.example},
       'valueType': spec.type == 'Boolean' ? 'BOOLEAN' : 'STRING',
     };

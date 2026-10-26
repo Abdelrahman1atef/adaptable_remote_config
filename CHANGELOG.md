@@ -1,3 +1,16 @@
+## 0.5.0
+
+- Several apps in one Firebase project: `--prefix <name>` names the keys
+  `<name>_android_version`, `<name>_force_update`... and the wizard now creates
+  them inside a Remote Config folder (parameter group) with the same name, so
+  every app has its own folder in the console. `--group <name>` picks another
+  folder name and `--no-group` skips the folder. The wizard also asks for the
+  folder when you answer the questions. Existing keys and folders are never
+  changed; a folder that already exists is extended.
+- README rewritten as plain step-by-step guides for each method (Firebase, a
+  JSON file, your own code), with how it works, what you need, how to test, and
+  a troubleshooting table.
+
 ## 0.4.0
 
 - The wizard can now create the Remote Config parameters for you, so there is

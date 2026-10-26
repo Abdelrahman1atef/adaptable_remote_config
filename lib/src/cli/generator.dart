@@ -77,6 +77,12 @@ String _firebaseGuide(SetupAnswers a) {
   final b = StringBuffer(
     'Firebase console > Remote Config > Add parameter, for each of:\n\n',
   );
+  if (a.group.isNotEmpty) {
+    b.writeln(
+      'Tip: put them in a folder called "${a.group}" '
+      '(Add new > Parameter group), so each app has its own folder.\n',
+    );
+  }
   for (final spec in a.parameters) {
     final example = spec.example.isEmpty ? '(empty)' : spec.example;
     b.writeln('  ${spec.name}  [${spec.type}]  e.g. $example');

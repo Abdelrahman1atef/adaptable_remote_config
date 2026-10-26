@@ -108,6 +108,41 @@ void main() {
       expect((top['android_version'] as Map)['valueType'], 'STRING');
     });
 
+    test('a group puts the new keys in their own folder', () {
+      final merge = mergeParameters(
+        _liveTemplate(),
+        wanted.parameters,
+        group: 'shop',
+      );
+      final groups = merge.template['parameterGroups'] as Map<String, dynamic>;
+      final shop = (groups['shop'] as Map)['parameters'] as Map;
+      expect(shop.keys, containsAll(['android_latest_version', 'android_store_link']));
+      // Nothing new at the top level; the other folder is untouched.
+      expect((merge.template['parameters'] as Map).keys, ['base_url']);
+      expect(jsonEncode(groups['client']), jsonEncode((_liveTemplate()['parameterGroups'] as Map)['client']));
+    });
+
+    test('a group that already exists is extended, not replaced', () {
+      final live =
+          jsonDecode(jsonEncode(_liveTemplate())) as Map<String, dynamic>;
+      (live['parameterGroups'] as Map<String, dynamic>)['shop'] = {
+        'description': 'My shop',
+        'parameters': {
+          'android_store_link': {
+            'defaultValue': {'value': 'https://play.example'},
+            'valueType': 'STRING',
+          },
+        },
+      };
+      final merge = mergeParameters(live, wanted.parameters, group: 'shop');
+      final shop = (merge.template['parameterGroups'] as Map)['shop'] as Map;
+      expect(shop['description'], 'My shop');
+      final params = shop['parameters'] as Map;
+      expect((params['android_store_link'] as Map)['defaultValue'], {'value': 'https://play.example'});
+      expect(params.containsKey('android_latest_version'), true);
+      expect(merge.existing, contains('android_store_link'));
+    });
+
     test('an empty template works and the input is not mutated', () {
       final original = <String, dynamic>{};
       mergeParameters(original, wanted.parameters);
@@ -146,6 +181,56 @@ void main() {
       expect(out.toString(), contains('Published'));
       expect(out.toString(), contains('left as they are: android_version, force_update'));
       expect(out.toString(), isNot(contains('Add parameter')));
+    });
+
+    test('--prefix creates prefixed keys inside a folder with that name', () {
+      final fake = FakeFirebase(_liveTemplate());
+      final out = StringBuffer();
+      expect(run(['--publish', '--prefix', 'shop'], fake, out), 0, reason: out.toString());
+      final shop = ((fake.live['parameterGroups'] as Map)['shop'] as Map)['parameters'] as Map;
+      expect(shop.keys, containsAll([
+        'shop_android_version',
+        'shop_ios_version',
+        'shop_force_update',
+        'shop_android_latest_version',
+        'shop_ios_store_link',
+      ]));
+      expect((shop['shop_force_update'] as Map)['valueType'], 'BOOLEAN');
+      expect(out.toString(), contains('in the folder "shop"'));
+      // The app's keys in the other folder and at the top are untouched.
+      expect(
+        jsonEncode((fake.live['parameterGroups'] as Map)['client']),
+        jsonEncode((_liveTemplate()['parameterGroups'] as Map)['client']),
+      );
+    });
+
+    test('two apps in one project each get their own folder', () {
+      final fake = FakeFirebase(_liveTemplate());
+      run(['--publish', '--prefix', 'customer'], fake, StringBuffer());
+      run(['--publish', '--prefix', 'driver'], fake, StringBuffer());
+      final groups = fake.live['parameterGroups'] as Map;
+      expect(groups.keys, containsAll(['client', 'customer', 'driver']));
+      final customer = (groups['customer'] as Map)['parameters'] as Map;
+      final driver = (groups['driver'] as Map)['parameters'] as Map;
+      expect(customer.keys.every((k) => (k as String).startsWith('customer_')), true);
+      expect(driver.keys.every((k) => (k as String).startsWith('driver_')), true);
+    });
+
+    test('--group and --no-group override the folder name', () {
+      final named = FakeFirebase(_liveTemplate());
+      run(['--publish', '--prefix', 'shop', '--group', 'Shop app'], named, StringBuffer());
+      expect((named.live['parameterGroups'] as Map).keys, contains('Shop app'));
+      final flat = FakeFirebase(_liveTemplate());
+      run(['--publish', '--prefix', 'shop', '--no-group'], flat, StringBuffer());
+      expect((flat.live['parameters'] as Map).keys, contains('shop_android_version'));
+      expect((flat.live['parameterGroups'] as Map).keys, isNot(contains('shop')));
+    });
+
+    test('a bad prefix is rejected before anything is written', () {
+      final fake = FakeFirebase(_liveTemplate());
+      final out = StringBuffer();
+      expect(run(['--publish', '--prefix', 'Bad Name'], fake, out), 64);
+      expect(fake.calls, isEmpty);
     });
 
     test('without --publish a --yes run never writes to Firebase', () {

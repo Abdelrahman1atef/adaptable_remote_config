@@ -15,6 +15,9 @@ Usage: dart run adaptable_remote_config [options]
   --source <name>    firebase | http | custom
   --mode <name>      both | force | optional
   --url <url>        JSON file URL (with --source http)
+  --prefix <name>    Name the keys <name>_android_version... (several apps, one project)
+  --group <name>     Put the keys in this Firebase console folder (default: the prefix)
+  --no-group         Do not use a console folder
   --publish          Create the Remote Config parameters in Firebase without asking
   --no-publish       Only print the parameters to create
   --project <id>     Firebase project id (default: read from firebase_options.dart)
@@ -88,6 +91,9 @@ int runCli(
   String? mode;
   String? url;
   String? project;
+  String? prefix;
+  String? group;
+  var noGroup = false;
   bool? publish;
   var yes = false;
   for (var i = 0; i < args.length; i++) {
@@ -106,6 +112,12 @@ int runCli(
       source = args[++i];
     } else if (arg == '--mode' && hasValue) {
       mode = args[++i];
+    } else if (arg == '--prefix' && hasValue) {
+      prefix = args[++i];
+    } else if (arg == '--group' && hasValue) {
+      group = args[++i];
+    } else if (arg == '--no-group') {
+      noGroup = true;
     } else if (arg == '--publish') {
       publish = true;
     } else if (arg == '--no-publish') {
@@ -130,6 +142,9 @@ int runCli(
         source: _parse(ConfigSource.values, source, '--source'),
         mode: _modeFrom(mode),
         url: url,
+        prefix: prefix,
+        group: group,
+        noGroup: noGroup,
       ),
       addDependency: addDependency,
       yes: yes,
@@ -161,10 +176,20 @@ T? _parse<T extends Enum>(List<T> values, String? name, String flag) {
 
 /// Answers given as command-line flags, so those questions are skipped.
 class SetupPreset {
-  const SetupPreset({this.source, this.mode, this.url});
+  const SetupPreset({
+    this.source,
+    this.mode,
+    this.url,
+    this.prefix,
+    this.group,
+    this.noGroup = false,
+  });
   final ConfigSource? source;
   final UpdateMode? mode;
   final String? url;
+  final String? prefix;
+  final String? group;
+  final bool noGroup;
 }
 
 /// Asks the questions, writes the file, edits the app and prints what is left.
@@ -301,12 +326,13 @@ bool _publishParameters(
   }
   try {
     final current = publisher.fetch(projectId);
-    final merge = mergeParameters(current, answers.parameters);
+    final merge = mergeParameters(current, answers.parameters, group: answers.group);
     if (merge.added.isEmpty) {
       out.writeln('\n+ Remote Config in "$projectId" already has every parameter.');
       return true;
     }
-    out.writeln('\nRemote Config in "$projectId" will get these new parameters:');
+    final where = answers.group.isEmpty ? '' : ' (in the folder "${answers.group}")';
+    out.writeln('\nRemote Config in "$projectId" will get these new parameters$where:');
     for (final spec in merge.added) {
       out.writeln('  + ${spec.name} = ${spec.example.isEmpty ? '(empty)' : spec.example}');
     }
@@ -318,7 +344,11 @@ bool _publishParameters(
       return false;
     }
     publisher.publish(projectId, merge.template, basedOn: current);
-    final after = mergeParameters(publisher.fetch(projectId), answers.parameters);
+    final after = mergeParameters(
+      publisher.fetch(projectId),
+      answers.parameters,
+      group: answers.group,
+    );
     if (after.added.isNotEmpty) {
       out.writeln('! Published, but ${after.added.map((s) => s.name).join(', ')} still missing.');
       return false;
@@ -555,7 +585,13 @@ SetupAnswers _collect(
     initial: {'android', 'ios'},
   );
 
-  final style = ask.select<KeyStyle>('How should the keys be named?', [
+  final presetPrefix = preset.prefix;
+  if (presetPrefix != null && !RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(presetPrefix)) {
+    throw const SetupAbort('--prefix: use lowercase letters, digits and underscores.');
+  }
+  final style = presetPrefix != null
+      ? KeyStyle.prefixed
+      : ask.select<KeyStyle>('How should the keys be named?', [
     const Choice(
       'Standard',
       KeyStyle.standard,
@@ -576,7 +612,7 @@ SetupAnswers _collect(
 
   var prefix = '';
   if (style == KeyStyle.prefixed) {
-    prefix = ask.input(
+    prefix = presetPrefix ?? ask.input(
       'Key prefix',
       defaultValue: appName,
       validate: (v) => RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(v)
@@ -596,6 +632,18 @@ SetupAnswers _collect(
                 ? null
                 : 'Enter a full URL, e.g. https://example.com/app.json';
           },
+        );
+  }
+
+  var group = '';
+  if (source == ConfigSource.firebase && !preset.noGroup) {
+    group = preset.group ??
+        ask.input(
+          'Folder in the Firebase console for these keys (Enter for none)',
+          defaultValue: style == KeyStyle.prefixed ? prefix : '',
+          validate: (v) => RegExp(r'^[A-Za-z0-9_ -]{0,60}$').hasMatch(v)
+              ? null
+              : 'Use letters, digits, spaces, - and _ (max 60).',
         );
   }
 
@@ -621,5 +669,6 @@ SetupAnswers _collect(
         : '',
     iosStoreUrl: ios ? ask.input('App Store link (needed for iOS updates)') : '',
     outputPath: outputPath,
+    group: group,
   );
 }

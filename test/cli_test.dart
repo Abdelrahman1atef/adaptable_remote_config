@@ -328,6 +328,7 @@ void main() {
           [0], // android
           1, // prefixed
           '', // prefix -> app name
+          '', // console folder -> the prefix
           '', // app id -> app name
           '', // play store link
         ]),
@@ -350,7 +351,7 @@ void main() {
         ..writeAsStringSync('// mine');
       final out = StringBuffer();
       runSetup(
-        ScriptedPrompter([0, 0, [0, 1], 0, '', '', '', false]),
+        ScriptedPrompter([0, 0, [0, 1], 0, '', '', '', '', false]),
         out,
         projectDir: dir,
       );
