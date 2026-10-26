@@ -41,15 +41,22 @@ PatchResult wrapAppWithGate(
   String source, {
   required List<String> imports,
   required bool showOptional,
+  String? appIconAsset,
 }) => _keepLineEndings(
   source,
-  (lf) => _wrapApp(lf, imports: imports, showOptional: showOptional),
+  (lf) => _wrapApp(
+    lf,
+    imports: imports,
+    showOptional: showOptional,
+    appIconAsset: appIconAsset,
+  ),
 );
 
 PatchResult _wrapApp(
   String source, {
   required List<String> imports,
   required bool showOptional,
+  String? appIconAsset,
 }) {
   if (source.contains('UpdateGate(')) {
     return const PatchResult.skipped('UpdateGate is already in place', alreadyDone: true);
@@ -71,9 +78,12 @@ PatchResult _wrapApp(
   final lineStart = source.lastIndexOf('\n', match.start) + 1;
   final indent = RegExp(r'^[ \t]*').stringMatch(source.substring(lineStart))!;
   final optional = showOptional ? '' : '\n$indent    showOptional: false,';
+  final icon = appIconAsset == null
+      ? ''
+      : "\n$indent    appIcon: const AssetImage('$appIconAsset'),";
   final insert =
       '\n$indent  builder: (context, child) => UpdateGate('
-      '\n$indent    controller: AppUpdate.controller,$optional'
+      '\n$indent    controller: AppUpdate.controller,$icon$optional'
       '\n$indent    child: child!,'
       '\n$indent  ),';
   final tail = source[open + 1] == '\n' ? '' : '\n$indent  ';
@@ -84,8 +94,14 @@ PatchResult _wrapApp(
   final patched =
       '$before${source.substring(match.start, open + 1)}$insert$tail'
       '${source.substring(open + 1)}';
+  // AssetImage lives in the widgets library; most apps already import it.
+  final needsWidgets =
+      appIconAsset != null && !patched.contains("import 'package:flutter/");
   return PatchResult.changed(
-    addImports(patched, imports),
+    addImports(patched, [
+      ...imports,
+      if (needsWidgets) "import 'package:flutter/widgets.dart';",
+    ]),
     'wrapped the app in UpdateGate',
   );
 }

@@ -59,6 +59,7 @@ class SetupAnswers {
     this.outputPath = 'lib/app_update.dart',
     this.group = '',
     this.playUpdate = false,
+    this.appIcon = '',
   });
 
   final String appId;
@@ -78,6 +79,9 @@ class SetupAnswers {
 
   /// Android: the Update button starts Google Play's in-app update first.
   final bool playUpdate;
+
+  /// Asset path of the app icon shown on the update screens; empty for none.
+  final String appIcon;
 
   List<String> get platforms => [if (android) 'android', if (ios) 'ios'];
 

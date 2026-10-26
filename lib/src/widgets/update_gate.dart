@@ -25,8 +25,9 @@ class UpdateGate extends StatefulWidget {
     this.showOptional = true,
     this.checkOnResume = true,
     this.allowSkip = true,
-    this.appIcon = const AssetImage(defaultAppIconAsset),
-    this.showAppIcon = true,
+    this.appIcon,
+    this.iconBuilder,
+    this.cardBuilder,
   });
 
   final RemoteConfigController controller;
@@ -43,13 +44,20 @@ class UpdateGate extends StatefulWidget {
   final bool checkOnResume;
   final bool allowSkip;
 
-  /// Your app icon, shown at the top of the wall and the dialog. By default it
-  /// is read from `assets/app_icon.png`; if that file is missing the update
-  /// icon is shown instead.
+  /// Your app icon, shown on a white tile at the top of the wall and the
+  /// dialog, for example `AssetImage('assets/logo.png')` or `NetworkImage(...)`.
+  /// Null (the default) shows a round update icon. If the image cannot be
+  /// loaded the round icon is shown instead.
   final ImageProvider? appIcon;
 
-  /// False always shows the update icon, never your app icon.
-  final bool showAppIcon;
+  /// Builds the icon yourself: any widget, such as an SVG or an animation.
+  /// Wins over [appIcon]. Gets the size the default layout gives it.
+  final UpdateIconBuilder? iconBuilder;
+
+  /// Lays out the whole card yourself from ready-made parts (title, message,
+  /// icon, buttons). The parts stay wired to the controller. Use it for the
+  /// wall and the dialog; [requiredBuilder] / [optionalBuilder] still win.
+  final UpdateCardBuilder? cardBuilder;
 
   @override
   State<UpdateGate> createState() => _UpdateGateState();
@@ -140,7 +148,8 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
                         controller: controller,
                         texts: widget.texts,
                         appIcon: widget.appIcon,
-                        showAppIcon: widget.showAppIcon,
+                        iconBuilder: widget.iconBuilder,
+                        cardBuilder: widget.cardBuilder,
                       ),
                 ),
               ),
@@ -163,7 +172,8 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
                   texts: widget.texts,
                   allowSkip: widget.allowSkip,
                   appIcon: widget.appIcon,
-                  showAppIcon: widget.showAppIcon,
+                  iconBuilder: widget.iconBuilder,
+                  cardBuilder: widget.cardBuilder,
                 ),
           ),
         ],

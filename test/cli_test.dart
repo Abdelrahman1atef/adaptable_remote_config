@@ -100,6 +100,29 @@ void main() {
       expect(source, isNot(contains('showOptional')));
     });
 
+    test('appIconAsset adds an appIcon line (and the widgets import)', () {
+      final result = wrapAppWithGate(
+        "Widget w() => MaterialApp(home: X());\n",
+        imports: _imports,
+        showOptional: true,
+        appIconAsset: 'assets/logo.png',
+      );
+      final source = result.source!;
+      expect(source, contains("appIcon: const AssetImage('assets/logo.png'),"));
+      expect(source, contains("import 'package:flutter/widgets.dart';"));
+      expect(
+        source.indexOf('controller:'),
+        lessThan(source.indexOf('appIcon:')),
+      );
+      final material = wrapAppWithGate(
+        _stockMain,
+        imports: _imports,
+        showOptional: true,
+        appIconAsset: 'assets/logo.png',
+      ).source!;
+      expect(material, isNot(contains('widgets.dart')));
+    });
+
     test('showOptional false is written, and const is dropped', () {
       final result = wrapAppWithGate(
         'import "a.dart";\nWidget w() => const MaterialApp(home: X());\n',
@@ -353,6 +376,7 @@ void main() {
           '', // prefix -> app name
           '', // console folder -> the prefix
           '', // app id -> app name
+          '', // app icon -> none
           '', // play store link
         ]),
         out,
@@ -374,7 +398,7 @@ void main() {
         ..writeAsStringSync('// mine');
       final out = StringBuffer();
       runSetup(
-        ScriptedPrompter([0, 0, [0, 1], 0, 0, '', '', '', '', false]),
+        ScriptedPrompter([0, 0, [0, 1], 0, 0, '', '', '', '', '', false]),
         out,
         projectDir: dir,
       );
@@ -489,17 +513,103 @@ void main() {
       expect(added, contains('in_app_update'));
     });
 
-    test('tells you where to put your app icon, until you have done it', () {
-      final first = StringBuffer();
-      runCli(['--yes', '--dir', dir.path, '--no-publish'], out: first);
-      expect(first.toString(), contains('assets/app_icon.png'));
+    group('app icon', () {
+      void writePubspec(String extra) => File('${dir.path}/pubspec.yaml')
+          .writeAsStringSync('name: shop_app\n$extra');
 
-      File('${dir.path}/assets/app_icon.png')
+      void addIcon(String path) => File('${dir.path}/$path')
         ..createSync(recursive: true)
         ..writeAsBytesSync([1, 2, 3]);
-      final second = StringBuffer();
-      runCli(['--yes', '--dir', dir.path, '--no-publish'], out: second);
-      expect(second.toString(), isNot(contains('Tip: put your app icon')));
+
+      void addApp() {
+        File('${dir.path}/lib/main.dart')
+          ..createSync(recursive: true)
+          ..writeAsStringSync(_stockMain);
+      }
+
+      test('--icon puts appIcon in the gate and checks pubspec', () {
+        writePubspec('flutter:\n  assets:\n    - assets/logo.png\n');
+        addIcon('assets/logo.png');
+        addApp();
+        final out = StringBuffer();
+        expect(
+          runCli(
+            ['--yes', '--dir', dir.path, '--no-publish', '--source', 'custom',
+              '--icon', 'assets/logo.png'],
+            out: out,
+          ),
+          0,
+          reason: out.toString(),
+        );
+        final main = File('${dir.path}/lib/main.dart').readAsStringSync();
+        expect(main, contains("appIcon: const AssetImage('assets/logo.png'),"));
+        expect(out.toString(), isNot(contains('Add the icon to pubspec.yaml')));
+      });
+
+      test('a folder listed under assets counts as declared', () {
+        writePubspec('flutter:\n  assets:\n    - assets/images/\n');
+        addIcon('assets/images/logo.png');
+        addApp();
+        final out = StringBuffer();
+        runCli(
+          ['--yes', '--dir', dir.path, '--no-publish', '--source', 'custom'],
+          out: out,
+        );
+        // Found by itself, because assets/images/logo.png is a known name.
+        expect(
+          File('${dir.path}/lib/main.dart').readAsStringSync(),
+          contains("AssetImage('assets/images/logo.png')"),
+        );
+        expect(out.toString(), isNot(contains('Add the icon to pubspec.yaml')));
+      });
+
+      test('an icon that is not in pubspec gets a hint to add it', () {
+        addIcon('assets/logo.png');
+        addApp();
+        final out = StringBuffer();
+        runCli(
+          ['--yes', '--dir', dir.path, '--no-publish', '--source', 'custom'],
+          out: out,
+        );
+        expect(out.toString(), contains('Add the icon to pubspec.yaml'));
+        expect(out.toString(), contains('- assets/logo.png'));
+      });
+
+      test('--no-icon skips a file that would be found', () {
+        addIcon('assets/logo.png');
+        addApp();
+        runCli(
+          ['--yes', '--dir', dir.path, '--no-publish', '--source', 'custom', '--no-icon'],
+          out: StringBuffer(),
+        );
+        expect(File('${dir.path}/lib/main.dart').readAsStringSync(),
+            isNot(contains('appIcon')));
+      });
+
+      test('no icon file: a tip says how to add one', () {
+        addApp();
+        final out = StringBuffer();
+        runCli(
+          ['--yes', '--dir', dir.path, '--no-publish', '--source', 'custom'],
+          out: out,
+        );
+        expect(out.toString(), contains('--icon assets/your_logo.png'));
+        expect(File('${dir.path}/lib/main.dart').readAsStringSync(),
+            isNot(contains('appIcon')));
+      });
+
+      test('a missing or odd path is rejected', () {
+        addApp();
+        for (final bad in ['assets/missing.png', "assets/it's.png", '/abs.png']) {
+          final out = StringBuffer();
+          expect(
+            runCli(['--yes', '--dir', dir.path, '--icon', bad], out: out),
+            64,
+            reason: bad,
+          );
+          expect(out.toString(), contains('--icon'));
+        }
+      });
     });
 
     test('the Android button question is skipped without Android', () {

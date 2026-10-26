@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controller.dart';
+import '../update.dart';
 
 /// Button and message labels. English by default, Arabic for Arabic locales.
 ///
@@ -56,13 +57,63 @@ class UpdateTexts {
       : const UpdateTexts();
 }
 
-/// Where the update screens look for your app icon when none is given.
-/// Put a square PNG here and list it under `flutter: assets:` in pubspec.yaml.
-const defaultAppIconAsset = 'assets/app_icon.png';
-
 /// Replaces a default screen while the controller keeps all the behavior.
 typedef UpdateWidgetBuilder =
     Widget Function(BuildContext context, RemoteConfigController controller);
+
+/// Builds the icon at the top of the card. [size] is the space the default
+/// layout gives it (64 on the dialog, 96 on the wall). Return any widget: an
+/// SVG, an animation, a network image...
+typedef UpdateIconBuilder = Widget Function(BuildContext context, double size);
+
+/// Lays out the whole card yourself, from ready-made parts in [UpdateCardData].
+typedef UpdateCardBuilder =
+    Widget Function(BuildContext context, UpdateCardData data);
+
+/// Everything a custom card needs, already built and wired to the controller.
+/// Place the parts however you like; the buttons keep working.
+class UpdateCardData {
+  const UpdateCardData({
+    required this.controller,
+    required this.texts,
+    required this.isRequired,
+    required this.title,
+    required this.message,
+    required this.icon,
+    required this.error,
+    required this.updateButton,
+    required this.laterButton,
+    required this.skipButton,
+  });
+
+  final RemoteConfigController controller;
+  final UpdateTexts texts;
+
+  /// True on the wall (cannot be dismissed), false on the optional dialog.
+  final bool isRequired;
+
+  /// Ready-to-show texts for this kind of update.
+  final String title;
+  final String message;
+
+  /// The icon: your app icon, your [UpdateIconBuilder], or the round default.
+  final Widget icon;
+
+  /// The "could not open the store" message; empty until a launch fails.
+  final Widget error;
+
+  /// Opens the store (becomes "Retry" after a failed launch).
+  final Widget updateButton;
+
+  /// Hides the dialog for a day. Null on the wall.
+  final Widget? laterButton;
+
+  /// Hides this version for good. Null on the wall, or when skipping is off.
+  final Widget? skipButton;
+
+  /// What is being offered: kind, version and store address.
+  UpdateResult get update => controller.update;
+}
 
 /// "Update" button that turns into "Retry" after a failed launch.
 class UpdateButton extends StatelessWidget {
@@ -86,31 +137,49 @@ class UpdateButton extends StatelessWidget {
   );
 }
 
-/// The card both update screens are made of: an icon, a title, a message and
-/// the actions. Everything is laid out with start/end, never left/right, so it
-/// reads correctly in both text directions. Pass [centered] for the wall.
+/// The default card: an icon, a title, a message and the buttons. Everything
+/// is laid out with start/end, never left/right, so it reads correctly in both
+/// text directions. [centered] is for the wall.
 class UpdateCard extends StatelessWidget {
   const UpdateCard({
     super.key,
     required this.title,
     required this.message,
+    required this.icon,
     required this.actions,
     this.error,
-    this.icon = Icons.system_update,
-    this.image,
     this.centered = false,
     this.elevated = true,
   });
 
+  /// The default card made from [data]: this is what the gate draws unless you
+  /// pass a `cardBuilder`. Call it from your own builder to wrap the default.
+  factory UpdateCard.fromData(UpdateCardData data) => UpdateCard(
+    title: data.title,
+    message: data.message,
+    icon: data.icon,
+    error: data.error,
+    centered: data.isRequired,
+    elevated: !data.isRequired,
+    actions: [
+      data.updateButton,
+      if (data.laterButton != null || data.skipButton != null) ...[
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            if (data.laterButton != null) Expanded(child: data.laterButton!),
+            if (data.skipButton != null) Expanded(child: data.skipButton!),
+          ],
+        ),
+      ],
+    ],
+  );
+
   final String title;
   final String message;
+  final Widget icon;
   final List<Widget> actions;
   final Widget? error;
-  final IconData icon;
-
-  /// Your app icon. Shown instead of [icon]; if it cannot be loaded (for
-  /// example the file is missing) [icon] is shown.
-  final ImageProvider? image;
 
   /// True: everything centered (the wall). False: aligned to the start edge.
   final bool centered;
@@ -131,11 +200,7 @@ class UpdateCard extends StatelessWidget {
             ? CrossAxisAlignment.center
             : CrossAxisAlignment.start,
         children: [
-          _Emblem(
-            image: image,
-            icon: icon,
-            size: elevated ? 64 : 96,
-          ),
+          icon,
           const SizedBox(height: 16),
           Text(
             title,
@@ -181,24 +246,68 @@ class UpdateCard extends StatelessWidget {
   }
 }
 
+/// The ready-made parts for one kind of update.
+UpdateCardData _dataFor(
+  BuildContext context, {
+  required RemoteConfigController controller,
+  required UpdateTexts strings,
+  required bool isRequired,
+  required bool allowSkip,
+  required ImageProvider? appIcon,
+  required UpdateIconBuilder? iconBuilder,
+}) {
+  final size = isRequired ? 96.0 : 64.0;
+  return UpdateCardData(
+    controller: controller,
+    texts: strings,
+    isRequired: isRequired,
+    title: isRequired ? strings.requiredTitle : strings.optionalTitle,
+    message: isRequired ? strings.requiredMessage : strings.optionalMessage,
+    icon:
+        iconBuilder?.call(context, size) ??
+        _Emblem(image: appIcon, size: size),
+    error: _LaunchError(controller: controller, texts: strings),
+    updateButton: UpdateButton(controller: controller, texts: strings),
+    laterButton: isRequired
+        ? null
+        : TextButton(
+            onPressed: () => controller.dismissOptional(),
+            child: Text(strings.later, textAlign: TextAlign.center),
+          ),
+    skipButton: isRequired || !allowSkip
+        ? null
+        : TextButton(
+            onPressed: () => controller.dismissOptional(skipVersion: true),
+            child: Text(strings.skip, textAlign: TextAlign.center),
+          ),
+  );
+}
+
+Widget _defaultCard(BuildContext context, UpdateCardData data) =>
+    UpdateCard.fromData(data);
+
 /// The blocking screen. Use it through [UpdateGate] so back stays blocked.
 class RequiredUpdatePage extends StatelessWidget {
   const RequiredUpdatePage({
     super.key,
     required this.controller,
     this.texts,
-    this.appIcon = const AssetImage(defaultAppIconAsset),
-    this.showAppIcon = true,
+    this.appIcon,
+    this.iconBuilder,
+    this.cardBuilder,
   });
 
   final RemoteConfigController controller;
   final UpdateTexts? texts;
 
-  /// Your app icon. Missing file: the update icon is shown instead.
+  /// Your app icon, shown on a white tile. Null: the round update icon.
   final ImageProvider? appIcon;
 
-  /// False hides the app icon and always shows the update icon.
-  final bool showAppIcon;
+  /// Builds the icon yourself (wins over [appIcon]).
+  final UpdateIconBuilder? iconBuilder;
+
+  /// Lays out the whole card yourself.
+  final UpdateCardBuilder? cardBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -210,14 +319,19 @@ class RequiredUpdatePage extends StatelessWidget {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsetsDirectional.all(24),
-              child: UpdateCard(
-                centered: true,
-                elevated: false,
-                image: showAppIcon ? appIcon : null,
-                title: strings.requiredTitle,
-                message: strings.requiredMessage,
-                error: _LaunchError(controller: controller, texts: strings),
-                actions: [UpdateButton(controller: controller, texts: strings)],
+              child: Builder(
+                builder: (context) => (cardBuilder ?? _defaultCard)(
+                  context,
+                  _dataFor(
+                    context,
+                    controller: controller,
+                    strings: strings,
+                    isRequired: true,
+                    allowSkip: false,
+                    appIcon: appIcon,
+                    iconBuilder: iconBuilder,
+                  ),
+                ),
               ),
             ),
           ),
@@ -234,19 +348,23 @@ class OptionalUpdateDialog extends StatelessWidget {
     required this.controller,
     this.texts,
     this.allowSkip = true,
-    this.appIcon = const AssetImage(defaultAppIconAsset),
-    this.showAppIcon = true,
+    this.appIcon,
+    this.iconBuilder,
+    this.cardBuilder,
   });
 
   final RemoteConfigController controller;
   final UpdateTexts? texts;
   final bool allowSkip;
 
-  /// Your app icon. Missing file: the update icon is shown instead.
+  /// Your app icon, shown on a white tile. Null: the round update icon.
   final ImageProvider? appIcon;
 
-  /// False hides the app icon and always shows the update icon.
-  final bool showAppIcon;
+  /// Builds the icon yourself (wins over [appIcon]).
+  final UpdateIconBuilder? iconBuilder;
+
+  /// Lays out the whole card yourself.
+  final UpdateCardBuilder? cardBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -255,35 +373,72 @@ class OptionalUpdateDialog extends StatelessWidget {
       textDirection: strings.directionOf(context),
       child: Padding(
         padding: const EdgeInsetsDirectional.all(24),
-        child: UpdateCard(
-          image: showAppIcon ? appIcon : null,
-          title: strings.optionalTitle,
-          message: strings.optionalMessage,
-          error: _LaunchError(controller: controller, texts: strings),
-          actions: [
-            UpdateButton(controller: controller, texts: strings),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => controller.dismissOptional(),
-                    child: Text(strings.later, textAlign: TextAlign.center),
-                  ),
-                ),
-                if (allowSkip)
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () =>
-                          controller.dismissOptional(skipVersion: true),
-                      child: Text(strings.skip, textAlign: TextAlign.center),
-                    ),
-                  ),
-              ],
+        child: Builder(
+          builder: (context) => (cardBuilder ?? _defaultCard)(
+            context,
+            _dataFor(
+              context,
+              controller: controller,
+              strings: strings,
+              isRequired: false,
+              allowSkip: allowSkip,
+              appIcon: appIcon,
+              iconBuilder: iconBuilder,
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// The icon at the top: your image on a white tile, or a round update icon.
+class _Emblem extends StatelessWidget {
+  const _Emblem({required this.image, required this.size});
+
+  final ImageProvider? image;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        shape: BoxShape.circle,
+      ),
+      child: SizedBox.square(
+        dimension: size,
+        child: Icon(
+          Icons.system_update,
+          size: size / 2,
+          color: scheme.onPrimaryContainer,
+        ),
+      ),
+    );
+    final provider = image;
+    if (provider == null) return fallback;
+    final radius = BorderRadius.circular(size / 4);
+    return Image(
+      image: provider,
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      excludeFromSemantics: true,
+      // The white tile appears only once the image has really loaded, so a
+      // broken image shows the plain round icon and nothing else.
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+          frame == null && !wasSynchronouslyLoaded
+          ? SizedBox.square(dimension: size)
+          : DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: radius,
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: ClipRRect(borderRadius: radius, child: child),
+            ),
+      errorBuilder: (_, _, _) => fallback,
     );
   }
 }
@@ -311,52 +466,4 @@ class _LaunchError extends StatelessWidget {
             ),
           ),
   );
-}
-
-/// The icon at the top of the card: your app icon, or a round update icon.
-class _Emblem extends StatelessWidget {
-  const _Emblem({required this.image, required this.icon, required this.size});
-
-  final ImageProvider? image;
-  final IconData icon;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final fallback = DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        shape: BoxShape.circle,
-      ),
-      child: SizedBox.square(
-        dimension: size,
-        child: Icon(icon, size: size / 2, color: scheme.onPrimaryContainer),
-      ),
-    );
-    final provider = image;
-    if (provider == null) return fallback;
-    final radius = BorderRadius.circular(size / 4);
-    return Image(
-      image: provider,
-      width: size,
-      height: size,
-      fit: BoxFit.contain,
-      excludeFromSemantics: true,
-      // The white frame appears only once the image has really loaded, so a
-      // missing file shows the plain round icon and nothing else.
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
-          frame == null && !wasSynchronouslyLoaded
-          ? SizedBox.square(dimension: size)
-          : DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: radius,
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: ClipRRect(borderRadius: radius, child: child),
-            ),
-      errorBuilder: (_, _, _) => fallback,
-    );
-  }
 }

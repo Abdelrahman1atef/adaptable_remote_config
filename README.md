@@ -95,6 +95,8 @@ More options:
 | `--url https://...` | The JSON file address (for `http`) |
 | `--play-update` | Android: the Update button starts Google Play's own update screen (see *Let the store do the update*) |
 | `--no-play-update` | Android: the Update button opens the store page (the default) |
+| `--icon assets/images/logo.png` | Show your app icon on the update screens (writes `appIcon:` for you) |
+| `--no-icon` | Do not show an app icon |
 | `--publish` | Create the Firebase values without asking |
 | `--no-publish` | Do not touch Firebase, only print the values to create |
 | `--prefix customer` | Several apps in one Firebase project: name the keys `customer_android_version`... (see below) |
@@ -105,8 +107,8 @@ More options:
 
 With `--yes`, nothing is written to your Firebase project unless you add `--publish`.
 
-**One more thing, for your own logo:** put your app icon at `assets/app_icon.png` to show it
-on the update screens (see *Show your app icon on the update screens* below).
+**One more thing, for your own logo:** pass `--icon assets/images/logo.png` (your own file) to show it
+on the update screens. See *Show your app icon on the update screens* below.
 
 Prefer to do it yourself? Follow your method below.
 
@@ -114,47 +116,73 @@ Prefer to do it yourself? Follow your method below.
 
 ## Show your app icon on the update screens
 
-The wall and the dialog can show **your app icon** at the top. You only add the picture.
-There is no code.
+The wall and the dialog can show **your app icon** at the top. You choose the picture, and
+**there is no fixed path or file name**. You hand it to `UpdateGate`.
 
-**1. Put your icon at this path in your app:**
-
-```
-assets/app_icon.png
-```
-
-- Use a **square PNG**. `512 x 512` is perfect.
-- Use the same picture as your launcher icon or logo (for example your brand logo on a
-  white background).
+**1. Put the picture in your app,** anywhere you like, for example
+`assets/images/logo.png`. Use a **square PNG** (`512 x 512` is perfect), such as your
+launcher icon or brand logo on a white background.
 
 **2. Tell Flutter about the file.** In your app's `pubspec.yaml`:
 
 ```yaml
 flutter:
   assets:
-    - assets/app_icon.png
+    - assets/images/logo.png     # or the whole folder:  - assets/images/
 ```
 
-**3. Stop the app and run it again.** (A new asset needs a restart, not a hot reload.)
+**3. Pass it to the gate:**
 
-The icon now appears on the force-update wall and on the optional dialog.
+```dart
+MaterialApp(
+  builder: (context, child) => UpdateGate(
+    controller: AppUpdate.controller,
+    appIcon: const AssetImage('assets/images/logo.png'),
+    child: child!,
+  ),
+)
+```
 
-| If... | You see |
+**4. Stop the app and run it again.** (A new asset needs a restart, not a hot reload.)
+
+The icon now appears on the force-update wall and on the optional dialog, on a white
+rounded tile (bigger on the wall).
+
+**The easy way:** let the setup tool do steps 2 and 3 for you:
+
+```sh
+dart run adaptable_remote_config --icon assets/images/logo.png
+```
+
+It checks that the file exists, writes `appIcon:` into your `UpdateGate`, and tells you if
+the file is not listed in `pubspec.yaml`. If you do not pass `--icon`, it looks for a file
+named `app_icon.png`, `icon.png` or `logo.png` in `assets/` or `assets/images/` and offers
+it. Use `--no-icon` to skip.
+
+| What you pass | What you see |
 | --- | --- |
-| The file is at `assets/app_icon.png` and listed in `pubspec.yaml` | **Your app icon** |
-| The file is missing or not listed | A round "update" icon (nothing breaks, no error) |
+| `appIcon: AssetImage(...)` and the file loads | **Your app icon** |
+| nothing | A round "update" icon |
+| `appIcon:` but the file is missing or broken | A round "update" icon (no error, nothing breaks) |
 
-**Use another path, or an icon from the internet:**
+**An icon from the internet:**
+
+```dart
+appIcon: const NetworkImage('https://example.com/icon.png'),
+```
+
+**An SVG, an animation, or any widget** (use `iconBuilder`; it wins over `appIcon`):
 
 ```dart
 UpdateGate(
   controller: AppUpdate.controller,
-  appIcon: const AssetImage('assets/images/logo.png'),      // another file
-  // appIcon: const NetworkImage('https://example.com/icon.png'), // or a web address
-  // showAppIcon: false,                                    // never show an app icon
+  iconBuilder: (context, size) => SvgPicture.asset('assets/logo.svg', width: size),
   child: child!,
 )
 ```
+
+`size` is the space the default layout gives the icon: `64` on the dialog and `96` on the
+wall. Want to change more than the icon? See *Change the look* below.
 
 ---
 
@@ -833,34 +861,111 @@ values.number('request_limit', 10);                        // number
 If the value is missing or wrong, you get the fallback you gave. Do not read these
 before `await AppUpdate.controller.initialize()` finishes.
 
-## Change the look
+## Change the look (from small to total)
 
-**The card works in both reading directions.** Everything is laid out with *start* and
-*end*, never left and right. In a left-to-right app the icon and text sit on the left. In
-a right-to-left app they sit on the right, and nothing needs to be flipped by hand.
+Pick the **smallest level** that does what you need. Every level keeps the behavior: the
+buttons, *Later*, *Skip*, the store link, the error message.
 
-- Arabic texts (`UpdateTexts.arabic()`, used automatically for the `ar` language) are
-  **always** drawn right-to-left, even inside a left-to-right app.
-- Other texts follow your app. To force a direction:
-  `UpdateTexts(textDirection: TextDirection.ltr)`.
-- On a small screen, or with very large text, the card scrolls instead of overflowing.
-- Colors come from your app's theme, so light and dark mode both work.
-- Your app icon is shown at the top (see *Show your app icon*).
+| Level | You want to... | Use |
+| --- | --- | --- |
+| 1 | Change the **words** | `texts: UpdateTexts(...)` |
+| 2 | Show **your icon** | `appIcon:` (an image) or `iconBuilder:` (any widget) |
+| 3 | **Re-arrange the card**: your own layout, colors, extra widgets | `cardBuilder:` |
+| 4 | Replace the **whole screen** | `requiredBuilder:`, `optionalBuilder:`, `loadingBuilder:` |
 
+### Level 1: the words
 
 ```dart
 UpdateGate(
   controller: AppUpdate.controller,
-  loadingBuilder: (context) => const MySplash(),
-  requiredBuilder: (context, controller) => MyWall(controller: controller),
-  optionalBuilder: (context, controller) => MyDialog(controller: controller),
-  texts: const UpdateTexts(update: 'Get it now'), // Arabic text is automatic for `ar`
+  texts: const UpdateTexts(
+    requiredTitle: 'Please update',
+    requiredMessage: 'This version is too old.',
+    update: 'Get the new version',
+  ),
   showOptional: true,   // false = never show the optional dialog
-  allowSkip: true,      // false = hide the "Skip this version" button
+  allowSkip: true,      // false = hide "Skip this version"
+  child: child!,
 )
 ```
 
-Your own wall only needs one button:
+Arabic is used automatically for the `ar` language (`UpdateTexts.arabic()`).
+
+### Level 2: the icon
+
+See *Show your app icon on the update screens* above.
+
+### Level 3: your own card layout
+
+`cardBuilder` gives you **ready-made parts**. You decide where each one goes. The buttons
+already work.
+
+```dart
+UpdateGate(
+  controller: AppUpdate.controller,
+  cardBuilder: (context, data) => Container(
+    padding: const EdgeInsetsDirectional.all(24),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        data.icon,
+        const SizedBox(height: 12),
+        Text(data.title, style: Theme.of(context).textTheme.titleLarge),
+        Text(data.message),
+        data.error,                              // empty until a launch fails
+        const SizedBox(height: 16),
+        data.updateButton,
+        if (data.laterButton != null) data.laterButton!,   // dialog only
+        if (data.skipButton != null) data.skipButton!,     // dialog only
+      ],
+    ),
+  ),
+  child: child!,
+)
+```
+
+The same builder is used for the **wall** and for the **dialog**. Use `data.isRequired` to
+tell them apart (the wall is full screen and cannot be closed).
+
+| Part in `data` | What it is |
+| --- | --- |
+| `data.title`, `data.message` | The texts for this kind of update (a `String`) |
+| `data.icon` | The icon (your `appIcon`, your `iconBuilder`, or the round default) |
+| `data.updateButton` | Opens the store. Becomes *Retry* after a failed launch. |
+| `data.laterButton` | Hides the dialog for a day. `null` on the wall. |
+| `data.skipButton` | Hides this version for good. `null` on the wall, or when `allowSkip: false`. |
+| `data.error` | "Could not open the store" message (empty until it fails) |
+| `data.isRequired` | `true` on the wall, `false` on the dialog |
+| `data.update` | What is offered: `kind`, `version`, store `destination` |
+| `data.controller`, `data.texts` | The controller and the texts, if you need them |
+
+**Keep the default look and just add to it:**
+
+```dart
+cardBuilder: (context, data) => Banner(
+  message: 'NEW',
+  location: BannerLocation.topEnd,
+  child: UpdateCard.fromData(data),   // the default card
+),
+```
+
+### Level 4: replace the whole screen
+
+```dart
+UpdateGate(
+  controller: AppUpdate.controller,
+  loadingBuilder: (context) => const MySplash(),                 // while the first check runs
+  requiredBuilder: (context, controller) => MyWall(controller),  // the wall
+  optionalBuilder: (context, controller) => MyDialog(controller),
+  child: child!,
+)
+```
+
+Your wall only needs one button:
 
 ```dart
 ListenableBuilder(
@@ -871,6 +976,24 @@ ListenableBuilder(
   ),
 )
 ```
+
+The gate still hides your app behind the wall and blocks the back button, whatever you
+draw.
+
+### Reading direction (left-to-right and right-to-left)
+
+The default card is laid out with *start* and *end*, never left and right. In a
+left-to-right app the icon and text sit on the left. In a right-to-left app they sit on the
+right, and nothing needs to be flipped by hand.
+
+- Arabic texts are **always** drawn right-to-left, even inside a left-to-right app.
+- Other texts follow your app. To force a direction:
+  `UpdateTexts(textDirection: TextDirection.ltr)`.
+- In your own `cardBuilder`, use `EdgeInsetsDirectional`, `AlignmentDirectional` and
+  `TextAlign.start` to get the same behavior.
+- On a small screen, or with very large text, the default card scrolls instead of
+  overflowing.
+- Colors come from your app's theme, so light and dark mode both work.
 
 ---
 
@@ -884,7 +1007,7 @@ ListenableBuilder(
 | **The wall shows for everyone** | The minimum version is higher than the installed one. Put the old value back and publish. |
 | **Changes arrive slowly (Firebase)** | Firebase keeps a copy for up to one hour on release apps. Wait, or restart the app after an hour. |
 | **The setup tool does not move with arrow keys** | Update to the latest version of this package. If it still fails, type the number of your choice, or use `--yes`. |
-| **My app icon does not show** (I see a round update icon) | 1. The file must be exactly `assets/app_icon.png` (or pass `appIcon:`). 2. It must be listed under `flutter: assets:` in `pubspec.yaml`. 3. **Stop and run the app again** (hot reload is not enough). 4. Make sure the file is a real PNG. |
+| **My app icon does not show** (I see a round update icon) | 1. Did you pass it? `UpdateGate(appIcon: const AssetImage('assets/images/logo.png'), ...)`. 2. Is the file listed under `flutter: assets:` in `pubspec.yaml`? 3. **Stop and run the app again** (hot reload is not enough). 4. Is the file a real PNG, and is the path spelled exactly right? |
 | **The Google Play update screen does not appear** | It only works for apps **installed from Google Play** with a **newer version already published**. Debug runs and hand-installed APKs fall back to the store page. Turn on the logs to see which path was taken. |
 | **`Could not update ABT experiments` in the phone log** | A harmless Firebase warning: your app has no Google Analytics SDK. See *How does a change in the console reach the screen?* |
 | **I want to see what the app received** | Turn on the logs: `log: kDebugMode ? const RemoteConfigLogger() : null` |
@@ -909,8 +1032,12 @@ ListenableBuilder(
 Make your own by extending `RemoteConfigProvider` (one method: `fetch()`).
 
 **Building blocks:** `UpdateGate`, `RequiredUpdatePage`, `OptionalUpdateDialog`,
-`UpdateCard` (the shared card), `UpdateButton`, `UpdateTexts`, `RemoteConfigLogger`.
-`defaultAppIconAsset` is the path where the app icon is looked up.
+`UpdateCard` (the default card; `UpdateCard.fromData(data)`), `UpdateCardData` (the parts a
+`cardBuilder` receives), `UpdateButton`, `UpdateTexts`, `RemoteConfigLogger`.
+
+**UpdateGate options:** `controller`, `child`, `texts`, `showOptional`, `allowSkip`,
+`checkOnResume`, `appIcon`, `iconBuilder`, `cardBuilder`, `requiredBuilder`,
+`optionalBuilder`, `loadingBuilder`.
 
 **Run the checks:**
 

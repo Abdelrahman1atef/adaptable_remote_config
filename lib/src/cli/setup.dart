@@ -20,6 +20,8 @@ Usage: dart run adaptable_remote_config [options]
   --no-group         Do not use a console folder
   --play-update      Android: the Update button starts Google Play's in-app update
   --no-play-update   Android: the Update button opens the store page (default)
+  --icon <path>      Your app icon (an asset path) to show on the update screens
+  --no-icon          Do not show an app icon (the default is a round update icon)
   --publish          Create the Remote Config parameters in Firebase without asking
   --no-publish       Only print the parameters to create
   --project <id>     Firebase project id (default: read from firebase_options.dart)
@@ -97,6 +99,8 @@ int runCli(
   String? group;
   var noGroup = false;
   bool? playUpdate;
+  String? icon;
+  var noIcon = false;
   bool? publish;
   var yes = false;
   for (var i = 0; i < args.length; i++) {
@@ -121,6 +125,10 @@ int runCli(
       group = args[++i];
     } else if (arg == '--no-group') {
       noGroup = true;
+    } else if (arg == '--icon' && hasValue) {
+      icon = args[++i];
+    } else if (arg == '--no-icon') {
+      noIcon = true;
     } else if (arg == '--play-update') {
       playUpdate = true;
     } else if (arg == '--no-play-update') {
@@ -153,6 +161,8 @@ int runCli(
         group: group,
         noGroup: noGroup,
         playUpdate: playUpdate,
+        icon: icon,
+        noIcon: noIcon,
       ),
       addDependency: addDependency,
       yes: yes,
@@ -192,6 +202,8 @@ class SetupPreset {
     this.group,
     this.noGroup = false,
     this.playUpdate,
+    this.icon,
+    this.noIcon = false,
   });
   final ConfigSource? source;
   final UpdateMode? mode;
@@ -200,6 +212,8 @@ class SetupPreset {
   final String? group;
   final bool noGroup;
   final bool? playUpdate;
+  final String? icon;
+  final bool noIcon;
 }
 
 /// Asks the questions, writes the file, edits the app and prints what is left.
@@ -245,6 +259,7 @@ int runSetup(
     appName,
     outputPath ?? 'lib/app_update.dart',
     preset,
+    projectDir,
   );
 
   final file = File('${projectDir.path}/${answers.outputPath}');
@@ -310,10 +325,15 @@ int runSetup(
     'The app already works with the defaults in lib/app_update.dart; the '
     'values above let you change it later without a release.',
   );
-  if (!File('${projectDir.path}/assets/app_icon.png').existsSync()) {
+  if (answers.appIcon.isEmpty) {
     out.writeln(
-      'Tip: put your app icon at assets/app_icon.png (and list it under '
-      '"flutter: assets:" in pubspec.yaml) to show it on the update screens.',
+      'Tip: to show your app icon on the update screens, run again with '
+      '--icon assets/your_logo.png, or pass appIcon: to UpdateGate.',
+    );
+  } else if (!_declaredInPubspec(pubspecText, answers.appIcon)) {
+    out.writeln(
+      'Add the icon to pubspec.yaml so Flutter bundles it:\n'
+      '  flutter:\n    assets:\n      - ${answers.appIcon}',
     );
   }
   return 0;
@@ -378,6 +398,49 @@ bool _publishParameters(
   }
 }
 
+/// Likely icon files, tried in order, as defaults for the icon question.
+const _iconCandidates = [
+  'assets/app_icon.png',
+  'assets/icon.png',
+  'assets/logo.png',
+  'assets/images/app_icon.png',
+  'assets/images/icon.png',
+  'assets/images/logo.png',
+];
+
+String _findIconAsset(Directory project) {
+  for (final path in _iconCandidates) {
+    if (File('${project.path}/$path').existsSync()) return path;
+  }
+  return '';
+}
+
+/// Null when [path] is empty (no icon) or an existing file we can write in Dart.
+String? _iconError(Directory project, String path) {
+  if (path.isEmpty) return null;
+  if (path.contains("'") || path.contains('\\') || path.startsWith('/')) {
+    return 'Use a relative asset path like assets/logo.png.';
+  }
+  if (!File('${project.path}/$path').existsSync()) {
+    return 'File not found: $path';
+  }
+  return null;
+}
+
+/// True when pubspec.yaml lists [path], or a folder above it, under assets.
+bool _declaredInPubspec(String pubspec, String path) {
+  final parts = path.split('/');
+  final options = {
+    path,
+    for (var i = 1; i < parts.length; i++) '${parts.sublist(0, i).join('/')}/',
+  };
+  return pubspec.split('\n').any((raw) {
+    final line = raw.trim();
+    if (!line.startsWith('-')) return false;
+    return options.contains(line.substring(1).trim());
+  });
+}
+
 enum _Kind { gate, firebase }
 
 class _Edit {
@@ -413,6 +476,7 @@ List<_Edit> _planEdits(
         localImport(appPath, a.outputPath, importPath),
       ],
       showOptional: a.usesOptional,
+      appIconAsset: a.appIcon.isEmpty ? null : a.appIcon,
     );
     if (result.changed) texts[appPath] = result.source!;
     edits.add(_Edit(_Kind.gate, appPath, result));
@@ -581,6 +645,7 @@ SetupAnswers _collect(
   String appName,
   String outputPath,
   SetupPreset preset,
+  Directory project,
 ) {
   final source = preset.source ??
       ask.select<ConfigSource>('Where do the remote values live?', const [
@@ -707,6 +772,19 @@ SetupAnswers _collect(
   );
 
   final ios = platforms.contains('ios');
+  final icon = preset.noIcon
+      ? ''
+      : preset.icon ??
+            ask.input(
+              'Your app icon on the update screens: asset path (Enter to skip)',
+              defaultValue: _findIconAsset(project),
+              validate: (v) => _iconError(project, v),
+            );
+  if (preset.icon != null) {
+    final error = _iconError(project, preset.icon!);
+    if (error != null) throw SetupAbort('--icon: $error');
+  }
+
   return SetupAnswers(
     appId: appId,
     source: source,
@@ -723,5 +801,6 @@ SetupAnswers _collect(
     outputPath: outputPath,
     group: group,
     playUpdate: playUpdate,
+    appIcon: icon,
   );
 }

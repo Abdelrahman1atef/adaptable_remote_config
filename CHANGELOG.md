@@ -1,3 +1,25 @@
+## 0.7.0
+
+- **Breaking, from 0.6.0 (one day old): no more fixed icon path.** The package no longer
+  reads `assets/app_icon.png` by itself. Pass your image to the gate:
+  `UpdateGate(appIcon: const AssetImage('assets/images/logo.png'))`. `showAppIcon` and
+  `defaultAppIconAsset` are removed. Without `appIcon` the round update icon is shown.
+  `UpdateCard` now takes `icon: Widget` (it used to take `image` and an `IconData`).
+- **Change the whole UI with builders, from small to total:**
+  - `iconBuilder: (context, size) => ...` builds the icon: any widget (SVG, animation...).
+  - `cardBuilder: (context, data) => ...` lays out the card yourself from ready-made parts
+    in the new `UpdateCardData` (title, message, icon, update / later / skip buttons,
+    error, kind, controller). The buttons stay wired. `UpdateCard.fromData(data)` is the
+    default card, so you can wrap it.
+  - `requiredBuilder`, `optionalBuilder` and `loadingBuilder` are unchanged.
+  All of them work on `UpdateGate`, `RequiredUpdatePage` and `OptionalUpdateDialog`.
+- **Wizard:** `--icon <asset path>` writes `appIcon:` into the gate it creates, checks
+  the file exists, and tells you if it is not listed in `pubspec.yaml`. With no flag it
+  offers a file named `app_icon.png`, `icon.png` or `logo.png` from `assets/` or
+  `assets/images/` if it finds one; `--no-icon` skips.
+- README: icon section rewritten around `appIcon:`; new "Change the look" with four
+  levels (words, icon, card layout, whole screen) and a table of what `cardBuilder` gets.
+
 ## 0.6.0
 
 - **Update card, rebuilt for both reading directions.** Everything uses start/end

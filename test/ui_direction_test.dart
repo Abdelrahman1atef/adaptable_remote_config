@@ -35,7 +35,7 @@ void main() {
     ) async {
       final c = await _controller();
       await tester.pumpWidget(
-        _app(direction, OptionalUpdateDialog(showAppIcon: false, controller: c)),
+        _app(direction, OptionalUpdateDialog(controller: c)),
       );
       final title = find.text('Update available');
       final icon = find.byIcon(Icons.system_update);
@@ -58,7 +58,7 @@ void main() {
     await tester.pumpWidget(
       _app(
         TextDirection.ltr,
-        OptionalUpdateDialog(showAppIcon: false, controller: c, texts: const UpdateTexts.arabic()),
+        OptionalUpdateDialog(controller: c, texts: const UpdateTexts.arabic()),
       ),
     );
     final title = find.text('يتوفر تحديث');
@@ -75,7 +75,7 @@ void main() {
   ) async {
     final c = await _controller();
     await tester.pumpWidget(
-      _app(TextDirection.rtl, OptionalUpdateDialog(showAppIcon: false, controller: c)),
+      _app(TextDirection.rtl, OptionalUpdateDialog(controller: c)),
     );
     expect(
       Directionality.of(tester.element(find.text('Update available'))),
@@ -85,7 +85,7 @@ void main() {
     await tester.pumpWidget(
       _app(
         TextDirection.rtl,
-        OptionalUpdateDialog(showAppIcon: false, controller: c,
+        OptionalUpdateDialog(controller: c,
           texts: const UpdateTexts(textDirection: TextDirection.ltr),
         ),
       ),
@@ -102,7 +102,7 @@ void main() {
       await c.initialize();
       addTearDown(c.dispose);
       await tester.pumpWidget(
-        _app(direction, RequiredUpdatePage(showAppIcon: false, controller: c)),
+        _app(direction, RequiredUpdatePage(controller: c)),
       );
       final screen = tester.getCenter(find.byType(RequiredUpdatePage));
       expect(
@@ -133,7 +133,7 @@ void main() {
           ),
           child: _app(
             direction,
-            OptionalUpdateDialog(showAppIcon: false, controller: c,
+            OptionalUpdateDialog(controller: c,
               texts: const UpdateTexts.arabic(),
             ),
           ),
@@ -153,7 +153,7 @@ void main() {
             brightness: Brightness.dark,
           ),
         ),
-        home: Scaffold(body: Center(child: OptionalUpdateDialog(showAppIcon: false, controller: c))),
+        home: Scaffold(body: Center(child: OptionalUpdateDialog(controller: c))),
       ),
     );
     final material = tester.widget<Material>(
