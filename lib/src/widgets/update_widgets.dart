@@ -373,17 +373,21 @@ class OptionalUpdateDialog extends StatelessWidget {
       textDirection: strings.directionOf(context),
       child: Padding(
         padding: const EdgeInsetsDirectional.all(24),
-        child: Builder(
-          builder: (context) => (cardBuilder ?? _defaultCard)(
-            context,
-            _dataFor(
+        // Any card, including your own cardBuilder, scrolls instead of
+        // overflowing on a short screen (a phone in landscape, big text).
+        child: SingleChildScrollView(
+          child: Builder(
+            builder: (context) => (cardBuilder ?? _defaultCard)(
               context,
-              controller: controller,
-              strings: strings,
-              isRequired: false,
-              allowSkip: allowSkip,
-              appIcon: appIcon,
-              iconBuilder: iconBuilder,
+              _dataFor(
+                context,
+                controller: controller,
+                strings: strings,
+                isRequired: false,
+                allowSkip: allowSkip,
+                appIcon: appIcon,
+                iconBuilder: iconBuilder,
+              ),
             ),
           ),
         ),

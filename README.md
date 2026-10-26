@@ -10,6 +10,69 @@ Tell old versions of your app to update, **without releasing a new app**.
 You change a few values on a server. The app reads them and decides what to show.
 Works on Android and iOS.
 
+<p align="center">
+  <img src="doc/screenshots/dialog.png" width="230" alt="The optional update dialog">
+  <img src="doc/screenshots/wall.png" width="230" alt="The force-update wall">
+  <img src="doc/screenshots/wall_arabic.png" width="230" alt="The wall in Arabic, right to left, with an app icon">
+</p>
+
+---
+
+## Try it first (no setup, no server)
+
+This repository has a **full example app**: a playground where you change the "server" values,
+pick a look, fake the store, and watch the wall, the dialog and the logs react. It needs no
+Firebase and no server.
+
+**On an Android phone:** download `adaptable_remote_config_example.apk` from the
+[latest release](https://github.com/Abdelrahman1atef/adaptable_remote_config/releases/latest)
+and install it. (Android asks you to allow installs from your browser.)
+
+**On your computer:** run it from the source. It works on Android, iOS, web, Windows, macOS
+and Linux:
+
+```sh
+git clone https://github.com/Abdelrahman1atef/adaptable_remote_config.git
+cd adaptable_remote_config/example
+flutter run
+```
+
+Then, in the app: tap the pill at the bottom, tap **Optional update** (a dialog appears),
+then **Force update** (the wall appears). The playground stays usable over the wall, and the
+**Logs** tab shows why each decision was made. The [example's README](example/README.md)
+lists everything you can try.
+
+---
+
+## Install
+
+This is a **Flutter** package, for **Android and iOS** apps. It does **not** work in plain
+Dart projects (command-line tools, servers), because it needs the Flutter SDK.
+
+**You need:** Flutter 3.32 or newer. Check with `flutter --version`.
+
+**1. In your Flutter app's folder** (the one with `pubspec.yaml`), run:
+
+```sh
+flutter pub add adaptable_remote_config
+```
+
+(or add `adaptable_remote_config: ^0.7.1` under `dependencies:` in `pubspec.yaml` and run
+`flutter pub get`).
+
+**2. Import it:**
+
+```dart
+import 'package:adaptable_remote_config/adaptable_remote_config.dart';
+```
+
+**3. Set it up.** The quickest way is the setup tool (next section). It is a command that
+comes with this package. You run it with `dart run` **from your Flutter app's folder**; the
+`dart` command is part of Flutter, so there is nothing else to install.
+
+If you use **Firebase**, your app must also be connected to Firebase (`firebase_core`
+and `flutterfire configure`). The setup tool helps with that too.
+
 ---
 
 ## How it works (60 seconds)
@@ -60,10 +123,9 @@ Not sure? Choose **Firebase**.
 
 ## The fast way: let the setup tool do it
 
-Run these two commands in your Flutter app folder:
+After *Install* above, run this in your Flutter app folder:
 
 ```sh
-flutter pub add adaptable_remote_config
 dart run adaptable_remote_config
 ```
 

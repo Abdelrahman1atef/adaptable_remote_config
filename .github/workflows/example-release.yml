@@ -1,0 +1,45 @@
+name: Example app (release download)
+
+# On every version tag, build the example app and attach it to the GitHub release,
+# so anyone can download and install it on an Android phone.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write # to create the release and upload the file
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: example
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Signed with the debug key, which is fine for a demo: it installs normally.
+      - name: Build the release APK
+        run: flutter build apk --release --no-pub
+
+      - name: Attach it to the GitHub release
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp example/build/app/outputs/flutter-apk/app-release.apk adaptable_remote_config_example.apk
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes "Playground app for adaptable_remote_config $GITHUB_REF_NAME. Download adaptable_remote_config_example.apk, install it on an Android phone, and try every feature. See https://pub.dev/packages/adaptable_remote_config for the package."
+          fi
+          gh release upload "$GITHUB_REF_NAME" adaptable_remote_config_example.apk --clobber

@@ -182,6 +182,34 @@ void main() {
       expect(seen!.skipButton, isNull);
     });
 
+    testWidgets('a very tall custom card scrolls instead of overflowing', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400, 300);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final c = await _controller();
+      await tester.pumpWidget(
+        _app(
+          OptionalUpdateDialog(
+            controller: c,
+            cardBuilder: (context, data) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < 12; i++) SizedBox(height: 60, child: Text('row $i')),
+                data.updateButton,
+              ],
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.dragFrom(const Offset(200, 250), const Offset(0, -400));
+      await tester.pump();
+      expect(find.text('Update'), findsOneWidget);
+    });
+
     testWidgets('allowSkip: false removes the skip part', (tester) async {
       final c = await _controller();
       UpdateCardData? seen;

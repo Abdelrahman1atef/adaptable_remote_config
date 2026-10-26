@@ -1,3 +1,22 @@
+## 0.7.1
+
+- **Install is Flutter-first.** The package no longer declares an `executables:` entry, so the
+  pub.dev "Installing" tab shows only `flutter pub add adaptable_remote_config` (it used to
+  lead with `dart pub global activate`, a plain-Dart command). The setup tool is still run
+  with `dart run adaptable_remote_config` from your Flutter app's folder. It now refuses a
+  plain Dart project with a clear message. README gets an "Install" section: Flutter
+  package, Android and iOS, Flutter 3.32+.
+- **A full example app** (`example/`): a playground to try every feature with no Firebase and
+  no server. Change the fake server's values and publish, pretend to be an Android phone or
+  an iPhone, set the installed version, try every "Change the look" level, Arabic and
+  right-to-left, a JSON file source served by a fake web server, offline, store failures,
+  Google Play's in-app update, and read the logs. Runs on Android, iOS, web, Windows, macOS
+  and Linux. CI tests and builds it on every change; every version tag attaches an
+  installable APK to the GitHub release. Screenshots are on the pub.dev page.
+- **A custom `cardBuilder` card (or any card) in `OptionalUpdateDialog` now scrolls** instead
+  of overflowing on a short screen (a phone in landscape, very large text). The default
+  card already did.
+
 ## 0.7.0
 
 - **Breaking, from 0.6.0 (one day old): no more fixed icon path.** The package no longer

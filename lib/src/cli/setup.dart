@@ -236,6 +236,13 @@ int runSetup(
     return 66;
   }
   final pubspecText = pubspec.readAsStringSync();
+  // This package needs the Flutter SDK; a plain Dart project cannot use it.
+  if (!RegExp(r'^\s*sdk:\s*flutter\s*$', multiLine: true).hasMatch(pubspecText)) {
+    out.writeln('This is not a Flutter app: pubspec.yaml has no "sdk: flutter".');
+    out.writeln('adaptable_remote_config is a Flutter package (Android and iOS apps).');
+    out.writeln('Run this from the root folder of your Flutter app.');
+    return 66;
+  }
   final name = RegExp(r'^name:\s*(\S+)', multiLine: true).firstMatch(pubspecText);
   final appName = name?.group(1) ?? 'my_app';
 

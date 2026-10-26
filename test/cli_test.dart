@@ -81,6 +81,12 @@ class MyApp extends StatelessWidget {
 }
 ''';
 
+const _flutterPubspec =
+    'name: shop_app\n'
+    'dependencies:\n'
+    '  flutter:\n'
+    '    sdk: flutter\n';
+
 const _imports = ["import 'package:x/app_update.dart';"];
 
 void main() {
@@ -359,7 +365,7 @@ void main() {
     setUp(() {
       dir = Directory.systemTemp.createTempSync('arc_cli_');
       File('${dir.path}/pubspec.yaml').writeAsStringSync(
-        'name: shop_app\ndependencies:\n  firebase_core: ^3.0.0\n',
+        'name: shop_app\ndependencies:\n  flutter:\n    sdk: flutter\n  firebase_core: ^3.0.0\n',
       );
     });
     tearDown(() => dir.deleteSync(recursive: true));
@@ -406,6 +412,16 @@ void main() {
       expect(out.toString(), contains('kept your existing'));
     });
 
+    test('refuses a plain Dart project with a clear message', () {
+      File('${dir.path}/pubspec.yaml').writeAsStringSync(
+        'name: server_tool\ndependencies:\n  http: ^1.0.0\n',
+      );
+      final out = StringBuffer();
+      expect(runCli(['--yes', '--dir', dir.path], out: out), 66);
+      expect(out.toString(), contains('not a Flutter app'));
+      expect(File('${dir.path}/lib/app_update.dart').existsSync(), false);
+    });
+
     test('refuses to run outside a Flutter project', () {
       final empty = Directory.systemTemp.createTempSync('arc_empty_');
       addTearDown(() => empty.deleteSync(recursive: true));
@@ -419,7 +435,7 @@ void main() {
       File('${dir.path}/lib/main.dart').writeAsStringSync(_stockMain);
       final added = <String>[];
       final out = StringBuffer();
-      File('${dir.path}/pubspec.yaml').writeAsStringSync('name: shop_app\n');
+      File('${dir.path}/pubspec.yaml').writeAsStringSync(_flutterPubspec);
       final code = runCli(
         ['--yes', '--dir', dir.path],
         out: out,
@@ -515,7 +531,7 @@ void main() {
 
     group('app icon', () {
       void writePubspec(String extra) => File('${dir.path}/pubspec.yaml')
-          .writeAsStringSync('name: shop_app\n$extra');
+          .writeAsStringSync('$_flutterPubspec$extra');
 
       void addIcon(String path) => File('${dir.path}/$path')
         ..createSync(recursive: true)
@@ -624,7 +640,7 @@ void main() {
     });
 
     test('--yes with http needs a url, and accepts flags', () {
-      File('${dir.path}/pubspec.yaml').writeAsStringSync('name: shop_app\n');
+      File('${dir.path}/pubspec.yaml').writeAsStringSync(_flutterPubspec);
       final out = StringBuffer();
       expect(
         runCli(['--yes', '--dir', dir.path, '--source', 'http'], out: out),

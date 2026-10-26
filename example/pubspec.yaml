@@ -1,17 +1,29 @@
 name: adaptable_remote_config_example
-description: Examples for adaptable_remote_config.
+description: >-
+  A playground for adaptable_remote_config. Change the "server" values, pick the
+  look, simulate the store, and watch the force-update wall, the optional dialog
+  and the logs react. No Firebase and no server needed.
 publish_to: none
+version: 1.0.0+1
+
 environment:
   sdk: '>=3.8.0 <4.0.0'
   flutter: '>=3.32.0'
+
 dependencies:
   flutter:
     sdk: flutter
   adaptable_remote_config:
     path: ../
-  firebase_remote_config: '>=5.5.0 <7.0.0'
+  # Only for MockClient, which plays the part of a web server in the JSON demo.
   http: ^1.3.0
+
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
+
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logo.png

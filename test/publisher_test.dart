@@ -155,7 +155,7 @@ void main() {
     setUp(() {
       dir = Directory.systemTemp.createTempSync('arc_pub_');
       File('${dir.path}/pubspec.yaml').writeAsStringSync(
-        'name: shop\ndependencies:\n  firebase_core: ^3.0.0\n',
+        'name: shop\ndependencies:\n  flutter:\n    sdk: flutter\n  firebase_core: ^3.0.0\n',
       );
       File('${dir.path}/lib/firebase_options.dart')
         ..createSync(recursive: true)

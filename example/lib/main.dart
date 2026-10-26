@@ -1,54 +1,102 @@
 import 'package:adaptable_remote_config/adaptable_remote_config.dart';
 import 'package:flutter/material.dart';
 
-/// Change the map below to try none, optional or required updates. Swap the
-/// provider for `FirebaseConfigProvider()` or `HttpConfigProvider(url: …)` in
-/// a real app; nothing else changes.
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  final updates = RemoteConfigController(
-    appId: 'example',
-    provider: CustomConfigProvider(
-      () async => {
-        'android_latest_version': '2.0.0',
-        'android_store_link':
-            'https://play.google.com/store/apps/details?id=com.example.app',
-        'base_url': 'https://api.example.com',
-      },
-    ),
-    // Only needed here, to be independent of the host app's real version.
-    appInfo: () async =>
-        const AppInfo(version: '1.0.0+1', packageName: 'com.example.app'),
-    platform: 'android',
-  );
-  runApp(ExampleApp(updates: updates));
-}
+import 'custom_looks.dart';
+import 'home_page.dart';
+import 'panel/playground_panel.dart';
+import 'playground_state.dart';
 
-class ExampleApp extends StatelessWidget {
-  const ExampleApp({super.key, required this.updates});
+/// A playground for `adaptable_remote_config`.
+///
+/// The "app" behind the update screens is [HomePage]. The pill at the bottom
+/// opens the playground: change the fake server's values, pick a look, fake the
+/// store, and read the logs. No Firebase and no server are needed.
+void main() => runApp(const PlaygroundApp());
 
-  final RemoteConfigController updates;
+class PlaygroundApp extends StatefulWidget {
+  const PlaygroundApp({super.key, this.state});
+
+  /// Tests pass their own state.
+  final PlaygroundState? state;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    builder: (_, child) => UpdateGate(controller: updates, child: child!),
-    home: Scaffold(
-      appBar: AppBar(title: const Text('Remote config example')),
-      body: ListenableBuilder(
-        listenable: updates,
-        builder: (_, _) => ListView(
-          children: [
-            ListTile(
-              title: const Text('API base URL'),
-              subtitle: Text(updates.values.string('base_url', 'fallback')),
-            ),
-            ListTile(
-              title: const Text('Refresh'),
-              onTap: () => updates.refresh(),
-            ),
-          ],
+  State<PlaygroundApp> createState() => _PlaygroundAppState();
+}
+
+class _PlaygroundAppState extends State<PlaygroundApp> {
+  late final PlaygroundState _state = widget.state ?? PlaygroundState();
+  late final bool _ownsState = widget.state == null;
+
+  @override
+  void dispose() {
+    if (_ownsState) _state.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const seed = Color(0xFF6750A4);
+    return ListenableBuilder(
+      listenable: _state,
+      builder: (context, _) => MaterialApp(
+        title: 'adaptable_remote_config playground',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seed)),
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: seed,
+            brightness: Brightness.dark,
+          ),
         ),
+        themeMode: _state.themeMode,
+        home: HomePage(state: _state),
+        // The gate goes around the whole app, above every route. The
+        // playground goes next to it, so it stays usable over the wall.
+        builder: (context, child) => _Shell(state: _state, child: child!),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _Shell extends StatelessWidget {
+  const _Shell({required this.state, required this.child});
+
+  final PlaygroundState state;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final gate = UpdateGate(
+      controller: state.controller,
+      // Level 1: the words.
+      texts: state.arabic ? const UpdateTexts.arabic() : null,
+      showOptional: state.showOptional,
+      allowSkip: state.allowSkip,
+      // Level 2: the icon.
+      appIcon: state.icon == IconStyle.image
+          ? const AssetImage('assets/logo.png')
+          : null,
+      iconBuilder: state.icon == IconStyle.builder ? demoIconBuilder : null,
+      // Level 3: the card layout.
+      cardBuilder: switch (state.card) {
+        CardStyle.custom => customCard,
+        CardStyle.banner => bannerCard,
+        _ => null,
+      },
+      // Level 4: the whole screens.
+      requiredBuilder: state.card == CardStyle.ownScreens ? ownWall : null,
+      optionalBuilder: state.card == CardStyle.ownScreens ? ownDialog : null,
+      child: child,
+    );
+    final forced = state.forcedDirection;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        forced == null
+            ? gate
+            : Directionality(textDirection: forced, child: gate),
+        PlaygroundPanelHost(state: state),
+      ],
+    );
+  }
 }
