@@ -249,6 +249,28 @@ void main() {
       expect(source, isNot(contains('subscribeToChanges')));
     });
 
+    test('the Google Play in-app update helper is generated on request', () {
+      final source = appUpdateSource(
+        const SetupAnswers(
+          appId: 'a',
+          source: ConfigSource.firebase,
+          mode: UpdateMode.both,
+          android: true,
+          ios: true,
+          playUpdate: true,
+        ),
+      );
+      expect(source, contains("import 'dart:io' show Platform;"));
+      expect(source, contains("import 'package:in_app_update/in_app_update.dart';"));
+      expect(source, contains('inAppUpdate: _playUpdate,'));
+      expect(source, contains('InAppUpdate.performImmediateUpdate()'));
+      expect(source, contains('if (!Platform.isAndroid) return false;'));
+      final plain = appUpdateSource(answers());
+      expect(plain, isNot(contains('in_app_update')));
+      expect(plain, isNot(contains('inAppUpdate')));
+      expect(plain, contains('// log: const RemoteConfigLogger(),'));
+    });
+
     test('custom has a loader stub and a prefix', () {
       final source = appUpdateSource(
         answers(source: ConfigSource.custom, style: KeyStyle.prefixed),
@@ -326,6 +348,7 @@ void main() {
           0, // Firebase
           1, // force only
           [0], // android
+          0, // Android button: store page
           1, // prefixed
           '', // prefix -> app name
           '', // console folder -> the prefix
@@ -351,7 +374,7 @@ void main() {
         ..writeAsStringSync('// mine');
       final out = StringBuffer();
       runSetup(
-        ScriptedPrompter([0, 0, [0, 1], 0, '', '', '', '', false]),
+        ScriptedPrompter([0, 0, [0, 1], 0, 0, '', '', '', '', false]),
         out,
         projectDir: dir,
       );
@@ -444,6 +467,50 @@ void main() {
       expect(relativeImport('lib/main.dart', 'lib/app_update.dart'), 'app_update.dart');
       expect(relativeImport('lib/src/app.dart', 'lib/app_update.dart'), '../app_update.dart');
       expect(relativeImport('lib/a/b/c.dart', 'lib/a/x.dart'), '../x.dart');
+    });
+
+    test('--play-update writes the helper and adds in_app_update', () {
+      final added = <String>[];
+      final out = StringBuffer();
+      expect(
+        runCli(
+          ['--yes', '--dir', dir.path, '--play-update', '--no-publish'],
+          out: out,
+          addDependency: (_, package) {
+            added.add(package);
+            return true;
+          },
+        ),
+        0,
+        reason: out.toString(),
+      );
+      final source = File('${dir.path}/lib/app_update.dart').readAsStringSync();
+      expect(source, contains('inAppUpdate: _playUpdate,'));
+      expect(added, contains('in_app_update'));
+    });
+
+    test('tells you where to put your app icon, until you have done it', () {
+      final first = StringBuffer();
+      runCli(['--yes', '--dir', dir.path, '--no-publish'], out: first);
+      expect(first.toString(), contains('assets/app_icon.png'));
+
+      File('${dir.path}/assets/app_icon.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync([1, 2, 3]);
+      final second = StringBuffer();
+      runCli(['--yes', '--dir', dir.path, '--no-publish'], out: second);
+      expect(second.toString(), isNot(contains('Tip: put your app icon')));
+    });
+
+    test('the Android button question is skipped without Android', () {
+      final out = StringBuffer();
+      runSetup(
+        ScriptedPrompter([0, 0, [1], 0, '', '', '', '']),
+        out,
+        projectDir: dir,
+      );
+      expect(File('${dir.path}/lib/app_update.dart').readAsStringSync(),
+          isNot(contains('inAppUpdate')));
     });
 
     test('--yes with http needs a url, and accepts flags', () {

@@ -18,6 +18,8 @@ Usage: dart run adaptable_remote_config [options]
   --prefix <name>    Name the keys <name>_android_version... (several apps, one project)
   --group <name>     Put the keys in this Firebase console folder (default: the prefix)
   --no-group         Do not use a console folder
+  --play-update      Android: the Update button starts Google Play's in-app update
+  --no-play-update   Android: the Update button opens the store page (default)
   --publish          Create the Remote Config parameters in Firebase without asking
   --no-publish       Only print the parameters to create
   --project <id>     Firebase project id (default: read from firebase_options.dart)
@@ -94,6 +96,7 @@ int runCli(
   String? prefix;
   String? group;
   var noGroup = false;
+  bool? playUpdate;
   bool? publish;
   var yes = false;
   for (var i = 0; i < args.length; i++) {
@@ -118,6 +121,10 @@ int runCli(
       group = args[++i];
     } else if (arg == '--no-group') {
       noGroup = true;
+    } else if (arg == '--play-update') {
+      playUpdate = true;
+    } else if (arg == '--no-play-update') {
+      playUpdate = false;
     } else if (arg == '--publish') {
       publish = true;
     } else if (arg == '--no-publish') {
@@ -145,6 +152,7 @@ int runCli(
         prefix: prefix,
         group: group,
         noGroup: noGroup,
+        playUpdate: playUpdate,
       ),
       addDependency: addDependency,
       yes: yes,
@@ -183,6 +191,7 @@ class SetupPreset {
     this.prefix,
     this.group,
     this.noGroup = false,
+    this.playUpdate,
   });
   final ConfigSource? source;
   final UpdateMode? mode;
@@ -190,6 +199,7 @@ class SetupPreset {
   final String? prefix;
   final String? group;
   final bool noGroup;
+  final bool? playUpdate;
 }
 
 /// Asks the questions, writes the file, edits the app and prints what is left.
@@ -272,6 +282,7 @@ int runSetup(
   }
 
   _ensureFirebase(ask, out, projectDir, answers, pubspecText, addDependency);
+  _ensurePlayUpdate(ask, out, projectDir, answers, pubspecText, addDependency);
 
   bool done(_Kind kind) => edits.any(
     (e) => e.kind == kind && (e.result.alreadyDone || (e.result.changed && applied)),
@@ -299,6 +310,12 @@ int runSetup(
     'The app already works with the defaults in lib/app_update.dart; the '
     'values above let you change it later without a release.',
   );
+  if (!File('${projectDir.path}/assets/app_icon.png').existsSync()) {
+    out.writeln(
+      'Tip: put your app icon at assets/app_icon.png (and list it under '
+      '"flutter: assets:" in pubspec.yaml) to show it on the update screens.',
+    );
+  }
   return 0;
 }
 
@@ -510,6 +527,26 @@ String? _findAppFile(Directory project) {
   return files.first;
 }
 
+/// Adds `in_app_update` when the Update button should use Google Play.
+void _ensurePlayUpdate(
+  Prompter ask,
+  StringSink out,
+  Directory project,
+  SetupAnswers a,
+  String pubspecText,
+  AddDependency add,
+) {
+  if (!a.playUpdate) return;
+  if (RegExp(r'^\s*in_app_update:', multiLine: true).hasMatch(pubspecText)) return;
+  if (ask.confirm('Add in_app_update to your app (flutter pub add)?')) {
+    out.writeln(
+      add(project, 'in_app_update')
+          ? '+ added in_app_update'
+          : '! could not run `flutter pub add in_app_update`; add it yourself',
+    );
+  }
+}
+
 /// Adds `firebase_core` when Firebase is the source and it is missing.
 void _ensureFirebase(
   Prompter ask,
@@ -589,6 +626,22 @@ SetupAnswers _collect(
   if (presetPrefix != null && !RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(presetPrefix)) {
     throw const SetupAbort('--prefix: use lowercase letters, digits and underscores.');
   }
+  final android = platforms.contains('android');
+  final playUpdate = android &&
+      (preset.playUpdate ??
+          ask.select<bool>('What should the Update button do on Android?', const [
+            Choice(
+              'Open the Play Store page',
+              false,
+              hint: 'works for every install',
+            ),
+            Choice(
+              'Google Play in-app update',
+              true,
+              hint: 'full-screen update inside the app; Play installs only',
+            ),
+          ]));
+
   final style = presetPrefix != null
       ? KeyStyle.prefixed
       : ask.select<KeyStyle>('How should the keys be named?', [
@@ -653,7 +706,6 @@ SetupAnswers _collect(
     validate: (v) => v.isEmpty ? 'Cannot be empty.' : null,
   );
 
-  final android = platforms.contains('android');
   final ios = platforms.contains('ios');
   return SetupAnswers(
     appId: appId,
@@ -670,5 +722,6 @@ SetupAnswers _collect(
     iosStoreUrl: ios ? ask.input('App Store link (needed for iOS updates)') : '',
     outputPath: outputPath,
     group: group,
+    playUpdate: playUpdate,
   );
 }

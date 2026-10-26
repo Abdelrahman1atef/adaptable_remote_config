@@ -23,6 +23,8 @@ RemoteConfigController controller(
   Duration timeout = const Duration(seconds: 1),
   DateTime Function()? clock,
   Future<bool> Function(UpdateResult)? openStore,
+  Future<bool> Function(UpdateResult)? inAppUpdate,
+  RemoteConfigLogger? log,
   Stream<void>? changes,
 }) => RemoteConfigController(
   provider: CustomConfigProvider(loader, changes: changes),
@@ -36,5 +38,7 @@ RemoteConfigController controller(
   startupWait: timeout,
   clock: clock ?? DateTime.now,
   openStore: openStore,
+  inAppUpdate: inAppUpdate,
+  log: log,
   subscribeToChanges: changes != null,
 );

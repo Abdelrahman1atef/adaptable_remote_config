@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'logger.dart';
 import 'providers.dart';
 import 'storage.dart';
 import 'update.dart';
@@ -25,6 +26,7 @@ class RemoteConfigController extends ChangeNotifier {
     String? platform,
     this.comparator = compareVersions,
     this.openStore,
+    this.inAppUpdate,
     this.startupWait = const Duration(seconds: 4),
     this.requestTimeout = const Duration(seconds: 4),
     this.refreshInterval = const Duration(hours: 1),
@@ -32,6 +34,7 @@ class RemoteConfigController extends ChangeNotifier {
     this.subscribeToChanges = false,
     this.clock = DateTime.now,
     this.onError,
+    this.log,
   }) : storage = storage ?? PreferencesConfigStorage(),
        platform = platform ?? detectPlatform() {
     _values = RemoteValues(defaults);
@@ -53,6 +56,12 @@ class RemoteConfigController extends ChangeNotifier {
 
   /// Replaces the default "open the store link" action.
   final Future<bool> Function(UpdateResult result)? openStore;
+
+  /// Tried first when the user taps Update, for example Google Play's own
+  /// in-app update screen. Return true when it handled the update; false (or
+  /// throwing) falls back to opening the store page. May take as long as the
+  /// download needs; it is not cut off by [requestTimeout].
+  final Future<bool> Function(UpdateResult result)? inAppUpdate;
   final Duration startupWait;
   final Duration requestTimeout;
   final Duration refreshInterval;
@@ -60,6 +69,9 @@ class RemoteConfigController extends ChangeNotifier {
   final bool subscribeToChanges;
   final DateTime Function() clock;
   final void Function(Object error, StackTrace stack)? onError;
+
+  /// Prints what was fetched and decided (off when null).
+  final RemoteConfigLogger? log;
 
   late RemoteValues _values;
   UpdateResult _update = const UpdateResult.none();
@@ -147,7 +159,10 @@ class RemoteConfigController extends ChangeNotifier {
   Future<void> _restore() async {
     try {
       final cached = await storage.read(_cacheKey).timeout(requestTimeout);
-      if (cached != null && !_disposed) _accept(cached);
+      if (cached != null && !_disposed) {
+        _logValues('RESTORED from the saved copy', cached);
+        _accept(cached);
+      }
       final prompts = await storage.read(_promptsKey).timeout(requestTimeout);
       _skipped = prompts?['skipped'] as String?;
       _dismissed = prompts?['dismissed'] as String?;
@@ -183,9 +198,14 @@ class RemoteConfigController extends ChangeNotifier {
 
   Future<UpdateResult> _fetch() async {
     _lastAttempt = clock();
+    final timer = Stopwatch()..start();
     try {
       final remote = await provider.fetch().timeout(requestTimeout);
       if (!_disposed) {
+        _logValues(
+          'FETCHED  ${provider.runtimeType}  (${timer.elapsedMilliseconds} ms)',
+          remote,
+        );
         _accept(remote);
         _error = null;
         await _save(_cacheKey, _values.toJson());
@@ -210,6 +230,7 @@ class RemoteConfigController extends ChangeNotifier {
     jsonEncode(merged.toJson());
     _setUpdate(_evaluate(merged));
     _values = merged;
+    _logDecision(merged, _update);
   }
 
   UpdateResult _evaluate(RemoteValues values) => evaluateUpdate(
@@ -247,6 +268,11 @@ class RemoteConfigController extends ChangeNotifier {
     if (_update.kind != UpdateKind.optional) return;
     _dismissed = _update.version;
     _remindAt = clock().add(remindAfter);
+    _logAction(
+      skipVersion
+          ? 'User tapped "Skip this version" (${_update.version})'
+          : 'User tapped "Later" (hidden for ${remindAfter.inHours} h)',
+    );
     if (skipVersion) _skipped = _update.version;
     _notify();
     await _save(_promptsKey, {
@@ -265,14 +291,30 @@ class RemoteConfigController extends ChangeNotifier {
     _actionError = null;
     _notify();
     var success = false;
+    _logAction('User tapped "Update" (${_update.destination})');
     try {
-      success = openStore != null
-          ? await openStore!(_update).timeout(requestTimeout)
-          : await launchUrl(
-              _update.destination!,
-              mode: LaunchMode.externalApplication,
-            ).timeout(requestTimeout);
-      if (!success) throw StateError('Could not open update destination');
+      final inApp = inAppUpdate;
+      if (inApp != null) {
+        try {
+          success = await inApp(_update);
+          _logAction(
+            success
+                ? 'The in-app update handled it'
+                : 'The in-app update did not run; opening the store page',
+          );
+        } catch (error, stack) {
+          _report(error, stack);
+        }
+      }
+      if (!success) {
+        success = openStore != null
+            ? await openStore!(_update).timeout(requestTimeout)
+            : await launchUrl(
+                _update.destination!,
+                mode: LaunchMode.externalApplication,
+              ).timeout(requestTimeout);
+        if (!success) throw StateError('Could not open update destination');
+      }
     } catch (error, stack) {
       if (!_disposed) _actionError = error;
       _report(error, stack);
@@ -295,6 +337,15 @@ class RemoteConfigController extends ChangeNotifier {
   void _report(Object error, StackTrace stack) {
     if (_disposed) return;
     _error = error;
+    final l = log;
+    if (l != null && l.errors) {
+      l.box(
+        error is FormatException
+            ? 'IGNORED  (the new values have a mistake; the last good ones stay)'
+            : 'ERROR',
+        ['$error'],
+      );
+    }
     try {
       onError?.call(error, stack);
     } catch (callbackError, callbackStack) {
@@ -302,6 +353,50 @@ class RemoteConfigController extends ChangeNotifier {
         FlutterErrorDetails(exception: callbackError, stack: callbackStack),
       );
     }
+  }
+
+  void _logValues(String title, Map<String, dynamic> map) {
+    final l = log;
+    if (l == null || !l.values) return;
+    l.box(title, [
+      '${map.length} keys',
+      ...l.describeValues(map),
+    ]);
+  }
+
+  void _logAction(String text) {
+    final l = log;
+    if (l != null && l.actions) l.box('ACTION', [text]);
+  }
+
+  /// Shows which values were read and what the app will do because of them.
+  void _logDecision(RemoteValues values, UpdateResult result) {
+    final l = log;
+    if (l == null || !l.decision) return;
+    final p = platform;
+    final app = _app;
+    if (p == null || app == null) {
+      l.box('DECISION', ['No update check on this platform.']);
+      return;
+    }
+    String key(String template) => template.replaceAll('{platform}', p);
+    String read(String template) {
+      final value = values.string(key(template));
+      return value.isEmpty ? '(empty)' : value;
+    }
+
+    l.box('DECISION  ($p, installed ${app.version})', [
+      'minimum  ${read(keys.minimumVersion)}   <- ${key(keys.minimumVersion)}',
+      'latest   ${read(keys.latestVersion)}   <- ${key(keys.latestVersion)}',
+      'force    ${values.boolean(key(keys.forceUpdate))}   <- ${key(keys.forceUpdate)}',
+      switch (result.kind) {
+        UpdateKind.none => '=> NOTHING  (the app is up to date, or no update is set)',
+        UpdateKind.optional =>
+          '=> DIALOG  (latest ${result.version})  store: ${result.destination}',
+        UpdateKind.required =>
+          '=> WALL  (minimum ${result.version})  store: ${result.destination}',
+      },
+    ]);
   }
 
   void _notify() {

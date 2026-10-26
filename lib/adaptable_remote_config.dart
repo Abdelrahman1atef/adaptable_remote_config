@@ -6,6 +6,7 @@
 library;
 
 export 'src/controller.dart';
+export 'src/logger.dart';
 export 'src/providers.dart';
 export 'src/storage.dart';
 export 'src/update.dart';

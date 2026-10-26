@@ -93,6 +93,8 @@ More options:
 | `--source firebase` (or `http`, `custom`) | Choose the method without being asked |
 | `--mode both` (or `force`, `optional`) | Choose the update types without being asked |
 | `--url https://...` | The JSON file address (for `http`) |
+| `--play-update` | Android: the Update button starts Google Play's own update screen (see *Let the store do the update*) |
+| `--no-play-update` | Android: the Update button opens the store page (the default) |
 | `--publish` | Create the Firebase values without asking |
 | `--no-publish` | Do not touch Firebase, only print the values to create |
 | `--prefix customer` | Several apps in one Firebase project: name the keys `customer_android_version`... (see below) |
@@ -103,7 +105,56 @@ More options:
 
 With `--yes`, nothing is written to your Firebase project unless you add `--publish`.
 
+**One more thing, for your own logo:** put your app icon at `assets/app_icon.png` to show it
+on the update screens (see *Show your app icon on the update screens* below).
+
 Prefer to do it yourself? Follow your method below.
+
+---
+
+## Show your app icon on the update screens
+
+The wall and the dialog can show **your app icon** at the top. You only add the picture.
+There is no code.
+
+**1. Put your icon at this path in your app:**
+
+```
+assets/app_icon.png
+```
+
+- Use a **square PNG**. `512 x 512` is perfect.
+- Use the same picture as your launcher icon or logo (for example your brand logo on a
+  white background).
+
+**2. Tell Flutter about the file.** In your app's `pubspec.yaml`:
+
+```yaml
+flutter:
+  assets:
+    - assets/app_icon.png
+```
+
+**3. Stop the app and run it again.** (A new asset needs a restart, not a hot reload.)
+
+The icon now appears on the force-update wall and on the optional dialog.
+
+| If... | You see |
+| --- | --- |
+| The file is at `assets/app_icon.png` and listed in `pubspec.yaml` | **Your app icon** |
+| The file is missing or not listed | A round "update" icon (nothing breaks, no error) |
+
+**Use another path, or an icon from the internet:**
+
+```dart
+UpdateGate(
+  controller: AppUpdate.controller,
+  appIcon: const AssetImage('assets/images/logo.png'),      // another file
+  // appIcon: const NetworkImage('https://example.com/icon.png'), // or a web address
+  // showAppIcon: false,                                    // never show an app icon
+  child: child!,
+)
+```
 
 ---
 
@@ -548,6 +599,209 @@ Letters like `1.2.0-beta` are not allowed.
 If you type a wrong version, the app **ignores the bad update and keeps the last good
 values**. It never blocks users because of a typo.
 
+## Let the store do the update (Android)
+
+> **Hint: this is the closest thing to a real, direct force update.**
+> On Android, Google Play has its own **immediate update** screen. Google shows it
+> *inside your app*: the new version downloads and installs, the app restarts, and the
+> user cannot continue until it is done. There is no jump to the store page.
+>
+> **Limits you must know:**
+> - **Android only.** Apple gives apps no way to force an update, so on iOS the Update
+>   button can only open the App Store page.
+> - The app must have been **installed from Google Play** (or a Play testing track). An
+>   APK you installed by hand, or a debug run from your computer, cannot use it.
+> - The new version must **already be published** on Google Play, with a higher
+>   `versionCode`.
+>
+> Because of these limits, this package keeps its own wall. **Your values decide *when*
+> to update. The Update button then starts the Google Play screen.** If Google Play
+> cannot do it, the button opens the store page instead, so users are never stuck.
+
+**The easy way:**
+
+```sh
+dart run adaptable_remote_config --play-update
+```
+
+(or choose *Google Play in-app update* when the tool asks what the Update button should
+do on Android). It adds the `in_app_update` package and writes the code below.
+
+**By hand:**
+
+1. `flutter pub add in_app_update`
+2. In `lib/app_update.dart`, add `inAppUpdate:` and the helper:
+
+```dart
+import 'dart:io' show Platform;
+
+import 'package:adaptable_remote_config/adaptable_remote_config.dart';
+import 'package:in_app_update/in_app_update.dart';
+
+class AppUpdate {
+  AppUpdate._();
+
+  static final RemoteConfigController controller = RemoteConfigController(
+    appId: 'my_app',
+    provider: FirebaseConfigProvider(/* ... */),
+    inAppUpdate: _playUpdate,   // tried first when the user taps Update
+  );
+
+  static Future<bool> _playUpdate(UpdateResult update) async {
+    if (!Platform.isAndroid) return false;            // iOS: open the store page
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      if (info.updateAvailability != UpdateAvailability.updateAvailable) {
+        return false;
+      }
+      if (update.isRequired && info.immediateUpdateAllowed) {
+        // Full screen. The user cannot continue until it is done.
+        final result = await InAppUpdate.performImmediateUpdate();
+        return result != AppUpdateResult.inAppUpdateFailed;
+      }
+      if (info.flexibleUpdateAllowed) {
+        // Downloads in the background, then installs and restarts the app.
+        final result = await InAppUpdate.startFlexibleUpdate();
+        if (result != AppUpdateResult.success) {
+          return result != AppUpdateResult.inAppUpdateFailed;
+        }
+        await InAppUpdate.completeFlexibleUpdate();
+        return true;
+      }
+    } catch (_) {
+      // Not installed from Google Play, or Play is busy: use the store page.
+    }
+    return false;
+  }
+}
+```
+
+**What `inAppUpdate` must return:** `true` = "I handled it" (the store page is **not**
+opened). `false`, or an error = "I could not", and the package opens the store page.
+
+| Situation | What the user sees after tapping *Update* |
+| --- | --- |
+| **Wall** (force) on Android, installed from Google Play | Google's full-screen update, then the app restarts |
+| **Dialog** (optional) on Android, installed from Google Play | The update downloads in the background, then the app restarts |
+| Android, installed by hand or run from your computer | The Play Store page opens |
+| The user says *No* on Google's screen | Nothing opens. The wall stays, so they can try again. |
+| iPhone | The App Store page opens |
+
+**How to test it:** upload a build to a Google Play **internal testing** track, install it
+from Play, then publish a build with a higher version code. Then set your values (for
+example `android_version` higher, `force_update` true) and open the old app.
+
+Read more: [Google Play in-app updates](https://developer.android.com/guide/playcore/in-app-updates)
+and the [`in_app_update`](https://pub.dev/packages/in_app_update) package. Tip: use the
+wall only for real breaking changes (an old server shut down, a security fix). For
+everything else, the optional dialog is kinder to your users.
+
+## How does a change in the console reach the screen?
+
+Firebase can **push** a change to an app that is open right now. This package listens
+for that push. In order:
+
+1. You press **Publish changes** in the Firebase console.
+2. Firebase tells the apps that are open: *"the config changed"* (real-time Remote Config).
+3. The package, with `subscribeToChanges: true`, **fetches and applies** the new values.
+4. The controller decides again (nothing, dialog or wall).
+5. If the decision changed, the controller tells `UpdateGate`, which **redraws at once**.
+   No restart. No new app release.
+
+**Be honest with yourself about this:** the push is a bonus, not a promise. It needs the
+app to be open and to have a live connection to Firebase. In our own test on an Android
+phone, a debug app that was already open did **not** update within 25 seconds, while a
+restart showed the change straight away. So:
+
+- Do not rely on the push for emergencies. **Every user gets the change the next time
+  they start the app** (within an hour on release apps, see *Table 6*).
+- To see if the push works for **you**, turn on the logs (next section), keep the app
+  open, press **Publish changes**, and watch for a `FETCHED` box a few seconds later.
+- If a firm real-time update matters to you, ask your team to check that Google Analytics
+  is enabled for the Firebase project. Firebase's own Flutter guide lists it for Remote
+  Config, and your console may show "Google Analytics is not enabled".
+
+**The line you see in your phone log:**
+
+```
+W/FirebaseRemoteConfig: Could not update ABT experiments.
+  AbtException: The Analytics SDK is not available. ...
+```
+
+This comes from Firebase, not from this package. ABT is Firebase **A/B Testing**. When new
+values are applied, Firebase tries to record A/B experiments, and it cannot, because your
+app does not include the Google Analytics SDK. It writes a warning and goes on. We did
+not find official documentation for this exact line, but in our phone tests the wall and
+the dialog still appeared with the same warning, so the values **were** applied. To remove
+the warning, add Analytics (`flutter pub add firebase_analytics`) and enable Google
+Analytics for the project. You can also ignore it.
+
+## See what was fetched (logs)
+
+Turn on logs and the package prints every key it received and what it decided, in boxes,
+like Dio's request logger. **It is off by default.**
+
+```dart
+RemoteConfigController(
+  appId: 'my_app',
+  provider: FirebaseConfigProvider(/* ... */),
+  log: kDebugMode ? const RemoteConfigLogger() : null,   // only in debug builds
+)
+```
+
+(`kDebugMode` comes from `package:flutter/foundation.dart`.) The output looks like this:
+
+```
+╔═ adaptable_remote_config · FETCHED  FirebaseConfigProvider  (312 ms)
+║ 7 keys
+║ android_latest_version = "2.0.0+1"
+║ android_store_link     = ""
+║ android_version        = "1.0.0+1"
+║ base_url               = "https://mahawi.almasader.org/api/"
+║ force_update           = "false"
+║ ios_version            = "1.0.0+1"
+║ payment_api_key        = "***"
+╚════════════════════════════════════════
+╔═ adaptable_remote_config · DECISION  (android, installed 1.2.0+4)
+║ minimum  1.0.0+1   <- android_version
+║ latest   2.0.0+1   <- android_latest_version
+║ force    false   <- force_update
+║ => DIALOG  (latest 2.0.0+1)  store: https://play.google.com/store/apps/details?id=com.example.app
+╚════════════════════════════════════════
+╔═ adaptable_remote_config · ACTION
+║ User tapped "Later" (hidden for 24 h)
+╚════════════════════════════════════════
+```
+
+What each box tells you:
+
+| Box | Meaning |
+| --- | --- |
+| **FETCHED** | The keys and values that arrived, from which source, and how long it took |
+| **RESTORED from the saved copy** | The app used the values it saved last time (no internet) |
+| **DECISION** | Which keys were read for this phone, and what the user will see. This answers "why do I see this?" |
+| **IGNORED** | The new values had a mistake (see *Table 2*). The last good values stay. |
+| **ERROR** | Something failed, for example no internet |
+| **ACTION** | The user tapped *Update*, *Later* or *Skip* |
+
+**Options:**
+
+```dart
+const RemoteConfigLogger(
+  values: true,          // print the fetched keys and values
+  decision: true,        // print what will be shown, and why
+  errors: true,          // print errors and ignored values
+  actions: true,         // print the user's taps
+  hideKeys: {'my_key'},  // print these values as ***
+  maxValueLength: 120,   // cut very long values
+  print: Log.info,       // send lines to your own logger (default: debugPrint)
+)
+```
+
+**Secrets are hidden for you.** Any key whose name contains `secret`, `token`, `password`
+or `api_key` is printed as `***`. Add more names with `hideKeys`. Still, only turn logs on
+in debug builds, and do not keep secrets in Remote Config.
+
 ## Use your own key names
 
 Your values can have other names. Tell the controller with `keys:`
@@ -580,6 +834,19 @@ If the value is missing or wrong, you get the fallback you gave. Do not read the
 before `await AppUpdate.controller.initialize()` finishes.
 
 ## Change the look
+
+**The card works in both reading directions.** Everything is laid out with *start* and
+*end*, never left and right. In a left-to-right app the icon and text sit on the left. In
+a right-to-left app they sit on the right, and nothing needs to be flipped by hand.
+
+- Arabic texts (`UpdateTexts.arabic()`, used automatically for the `ar` language) are
+  **always** drawn right-to-left, even inside a left-to-right app.
+- Other texts follow your app. To force a direction:
+  `UpdateTexts(textDirection: TextDirection.ltr)`.
+- On a small screen, or with very large text, the card scrolls instead of overflowing.
+- Colors come from your app's theme, so light and dark mode both work.
+- Your app icon is shown at the top (see *Show your app icon*).
+
 
 ```dart
 UpdateGate(
@@ -617,6 +884,10 @@ ListenableBuilder(
 | **The wall shows for everyone** | The minimum version is higher than the installed one. Put the old value back and publish. |
 | **Changes arrive slowly (Firebase)** | Firebase keeps a copy for up to one hour on release apps. Wait, or restart the app after an hour. |
 | **The setup tool does not move with arrow keys** | Update to the latest version of this package. If it still fails, type the number of your choice, or use `--yes`. |
+| **My app icon does not show** (I see a round update icon) | 1. The file must be exactly `assets/app_icon.png` (or pass `appIcon:`). 2. It must be listed under `flutter: assets:` in `pubspec.yaml`. 3. **Stop and run the app again** (hot reload is not enough). 4. Make sure the file is a real PNG. |
+| **The Google Play update screen does not appear** | It only works for apps **installed from Google Play** with a **newer version already published**. Debug runs and hand-installed APKs fall back to the store page. Turn on the logs to see which path was taken. |
+| **`Could not update ABT experiments` in the phone log** | A harmless Firebase warning: your app has no Google Analytics SDK. See *How does a change in the console reach the screen?* |
+| **I want to see what the app received** | Turn on the logs: `log: kDebugMode ? const RemoteConfigLogger() : null` |
 | **`dart run adaptable_remote_config` says the package is missing** | Run `flutter pub add adaptable_remote_config` first, from the app folder. |
 
 ---
@@ -631,14 +902,15 @@ ListenableBuilder(
 `shouldPrompt`, `isReady`, `error`, `actionError`.
 
 **Controller options:** `appId`, `provider`, `keys`, `defaults`, `storage`, `comparator`,
-`openStore`, `startupWait`, `requestTimeout`, `refreshInterval`, `remindAfter`,
-`subscribeToChanges`, `onError`.
+`openStore`, `inAppUpdate`, `startupWait`, `requestTimeout`, `refreshInterval`,
+`remindAfter`, `subscribeToChanges`, `onError`, `log`.
 
 **Sources:** `FirebaseConfigProvider`, `HttpConfigProvider`, `CustomConfigProvider`.
 Make your own by extending `RemoteConfigProvider` (one method: `fetch()`).
 
 **Building blocks:** `UpdateGate`, `RequiredUpdatePage`, `OptionalUpdateDialog`,
-`UpdateButton`, `UpdateTexts`.
+`UpdateCard` (the shared card), `UpdateButton`, `UpdateTexts`, `RemoteConfigLogger`.
+`defaultAppIconAsset` is the path where the app icon is looked up.
 
 **Run the checks:**
 

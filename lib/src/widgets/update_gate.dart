@@ -25,6 +25,8 @@ class UpdateGate extends StatefulWidget {
     this.showOptional = true,
     this.checkOnResume = true,
     this.allowSkip = true,
+    this.appIcon = const AssetImage(defaultAppIconAsset),
+    this.showAppIcon = true,
   });
 
   final RemoteConfigController controller;
@@ -40,6 +42,14 @@ class UpdateGate extends StatefulWidget {
   /// Refreshes when the app resumes, at most once per `refreshInterval`.
   final bool checkOnResume;
   final bool allowSkip;
+
+  /// Your app icon, shown at the top of the wall and the dialog. By default it
+  /// is read from `assets/app_icon.png`; if that file is missing the update
+  /// icon is shown instead.
+  final ImageProvider? appIcon;
+
+  /// False always shows the update icon, never your app icon.
+  final bool showAppIcon;
 
   @override
   State<UpdateGate> createState() => _UpdateGateState();
@@ -129,6 +139,8 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
                       RequiredUpdatePage(
                         controller: controller,
                         texts: widget.texts,
+                        appIcon: widget.appIcon,
+                        showAppIcon: widget.showAppIcon,
                       ),
                 ),
               ),
@@ -150,6 +162,8 @@ class _UpdateGateState extends State<UpdateGate> with WidgetsBindingObserver {
                   controller: controller,
                   texts: widget.texts,
                   allowSkip: widget.allowSkip,
+                  appIcon: widget.appIcon,
+                  showAppIcon: widget.showAppIcon,
                 ),
           ),
         ],

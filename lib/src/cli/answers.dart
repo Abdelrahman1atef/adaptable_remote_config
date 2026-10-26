@@ -58,6 +58,7 @@ class SetupAnswers {
     this.iosStoreUrl = '',
     this.outputPath = 'lib/app_update.dart',
     this.group = '',
+    this.playUpdate = false,
   });
 
   final String appId;
@@ -74,6 +75,9 @@ class SetupAnswers {
 
   /// Firebase console folder (parameter group) for the keys; empty for none.
   final String group;
+
+  /// Android: the Update button starts Google Play's in-app update first.
+  final bool playUpdate;
 
   List<String> get platforms => [if (android) 'android', if (ios) 'ios'];
 

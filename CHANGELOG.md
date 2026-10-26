@@ -1,3 +1,28 @@
+## 0.6.0
+
+- **Update card, rebuilt for both reading directions.** Everything uses start/end
+  instead of left/right: icon, title, message and buttons sit on the correct side in
+  left-to-right and right-to-left apps. Arabic texts are always drawn right-to-left, even
+  inside a left-to-right app (`UpdateTexts.textDirection`, new). The card scrolls on small
+  screens and with very large text instead of overflowing, and follows the app theme.
+  New `UpdateCard` widget shared by the wall and the dialog.
+- **Your app icon on the wall and dialog.** Put a square PNG at `assets/app_icon.png`
+  (and list it in `pubspec.yaml`). No code. Missing file: the round update icon, no
+  error. Another file or a web address: `UpdateGate(appIcon: ...)`; hide it with
+  `showAppIcon: false`. The wizard reminds you where to put it.
+- **Let Google Play do the update (Android).** New `inAppUpdate:` option on the
+  controller, tried first when the user taps Update; returning false or throwing opens
+  the store page as before. The wizard can write the helper for Google Play's immediate /
+  flexible in-app update: `--play-update` (adds `in_app_update`). Documented with the
+  limits (Play installs only, Android only; iOS cannot force an update).
+- **Optional logs, like Dio's request logger.** `log: const RemoteConfigLogger()` prints
+  every fetched key and value, what the app decided and why, errors and ignored values,
+  and the user's taps. Off by default; secrets (`token`, `secret`, `password`,
+  `api_key`) are printed as `***`; send lines to your own logger with `print:`.
+- README: how a console change reaches the screen (and what real-time does not promise),
+  the Firebase `Could not update ABT experiments` warning explained, new sections for the
+  items above.
+
 ## 0.5.1
 
 - README: a decision table that shows, for every combination of `force_update`,
