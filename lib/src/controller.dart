@@ -207,6 +207,7 @@ class RemoteConfigController extends ChangeNotifier {
         _logValues(
           'FETCHED  ${provider.runtimeType}  (${timer.elapsedMilliseconds} ms)',
           remote,
+          defaults: provider.defaultKeys,
         );
         _accept(remote);
         _error = null;
@@ -370,12 +371,19 @@ class RemoteConfigController extends ChangeNotifier {
     }
   }
 
-  void _logValues(String title, Map<String, dynamic> map) {
+  void _logValues(
+    String title,
+    Map<String, dynamic> map, {
+    Set<String> defaults = const {},
+  }) {
     final l = log;
     if (l == null || !l.values) return;
     l.box(title, [
-      '${map.length} keys',
-      ...l.describeValues(map),
+      defaults.isEmpty
+          ? '${map.length} keys'
+          : '${map.length} keys, ${defaults.length} of them are defaults '
+                'from your code, not on the server',
+      ...l.describeValues(map, defaults: defaults),
     ]);
   }
 

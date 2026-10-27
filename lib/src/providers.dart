@@ -12,6 +12,10 @@ abstract class RemoteConfigProvider {
   /// The latest values as a flat or nested JSON-compatible map.
   Future<Map<String, dynamic>> fetch();
 
+  /// Keys of the last [fetch] whose value came from the app's own defaults, not
+  /// from the server. Only used to mark them in the log.
+  Set<String> get defaultKeys => const {};
+
   /// Each event means "values changed, fetch again".
   Stream<void> get changes => const Stream.empty();
 
@@ -132,11 +136,18 @@ class FirebaseConfigProvider extends RemoteConfigProvider {
     } else {
       await remoteConfig.fetchAndActivate();
     }
-    return {
-      for (final entry in remoteConfig.getAll().entries)
-        entry.key: entry.value.asString(),
+    final all = remoteConfig.getAll();
+    _defaultKeys = {
+      for (final entry in all.entries)
+        if (entry.value.source == ValueSource.valueDefault) entry.key,
     };
+    return {for (final entry in all.entries) entry.key: entry.value.asString()};
   }
+
+  Set<String> _defaultKeys = const {};
+
+  @override
+  Set<String> get defaultKeys => _defaultKeys;
 
   @override
   Stream<void> get changes => remoteConfig.onConfigUpdated.map((_) {

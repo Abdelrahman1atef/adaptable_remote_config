@@ -63,13 +63,19 @@ class RemoteConfigLogger {
     out('╚${'═' * 40}');
   }
 
-  /// `key = value` lines, sorted and aligned, with secrets hidden.
-  List<String> describeValues(Map<String, dynamic> map) {
+  /// `key = value` lines, sorted and aligned, with secrets hidden. A key in
+  /// [defaults] is marked: the app's own default supplies it, it is not on the
+  /// server (so deleting it online changes nothing).
+  List<String> describeValues(
+    Map<String, dynamic> map, {
+    Set<String> defaults = const {},
+  }) {
     final keys = map.keys.toList()..sort();
     final width = keys.fold<int>(0, (m, k) => k.length > m ? k.length : m);
     return [
       for (final key in keys)
-        '${key.padRight(width)} = ${_show(key, map[key])}',
+        '${key.padRight(width)} = ${_show(key, map[key])}'
+        '${defaults.contains(key) ? '  (default, not on the server)' : ''}',
     ];
   }
 

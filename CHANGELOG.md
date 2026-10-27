@@ -1,3 +1,10 @@
+## 0.7.3
+
+- **The FETCHED log marks keys that are not on the server.** With Firebase, a key you deleted
+  in the console still appears if your `defaults:` list names it. Such keys now end with
+  `(default, not on the server)` and the box header counts them. New
+  `RemoteConfigProvider.defaultKeys` (empty for the other providers).
+
 ## 0.7.2
 
 - **The logs now say whether an optional dialog is really shown.** Under `=> DIALOG` the

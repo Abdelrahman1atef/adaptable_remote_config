@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'helpers.dart' as helpers;
 
 void main() {
+  defaultKeyLogTests();
   group('logger', () {
     late List<String> lines;
     setUp(() => lines = []);
@@ -214,5 +215,34 @@ void main() {
       expect(await c.openUpdate(), false);
       expect(c.actionError, isNotNull);
     });
+  });
+}
+
+class _DefaultsProvider extends CustomConfigProvider {
+  _DefaultsProvider(super.loader);
+
+  @override
+  Set<String> get defaultKeys => const {'android_version'};
+}
+
+void defaultKeyLogTests() {
+  test('FETCHED marks a key that comes from the app defaults', () async {
+    final lines = <String>[];
+    final c = RemoteConfigController(
+      provider: _DefaultsProvider(
+        () async => {'android_version': '1', 'customer_android_version': '2'},
+      ),
+      appId: 'test',
+      storage: MemoryConfigStorage(),
+      appInfo: () async => const AppInfo(version: '1+1', packageName: 'a.b'),
+      platform: 'android',
+      log: RemoteConfigLogger(print: lines.add),
+    );
+    addTearDown(c.dispose);
+    await c.initialize();
+    final text = lines.join('\n');
+    expect(text, contains('2 keys, 1 of them are defaults'));
+    expect(text, contains('android_version          = "1"  (default, not on the server)'));
+    expect(text, isNot(contains('"2"  (default')));
   });
 }

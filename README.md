@@ -853,13 +853,14 @@ RemoteConfigController(
 
 ```
 ╔═ adaptable_remote_config · FETCHED  FirebaseConfigProvider  (312 ms)
-║ 7 keys
+║ 8 keys, 2 of them are defaults from your code, not on the server
 ║ android_latest_version = "2.0.0+1"
 ║ android_store_link     = ""
 ║ android_version        = "1.0.0+1"
 ║ base_url               = "https://mahawi.almasader.org/api/"
 ║ force_update           = "false"
-║ ios_version            = "1.0.0+1"
+║ ios_version            = "1.0.0+1"  (default, not on the server)
+║ ios_latest_version     = "1.0.0+1"  (default, not on the server)
 ║ payment_api_key        = "***"
 ╚════════════════════════════════════════
 ╔═ adaptable_remote_config · DECISION  (android, installed 1.2.0+4)
@@ -877,7 +878,7 @@ What each box tells you:
 
 | Box | Meaning |
 | --- | --- |
-| **FETCHED** | The keys and values that arrived, from which source, and how long it took |
+| **FETCHED** | The keys and values that arrived and how long it took. A key marked `(default, not on the server)` comes from the `defaults:` list in your code. If you deleted that key in the Firebase console and it still shows, this is why: remove it from `defaults:` too (Firebase only) |
 | **RESTORED from the saved copy** | The app used the values it saved last time (no internet) |
 | **DECISION** | Which keys were read for this phone, and what the user will see. This answers "why do I see this?" For a dialog it ends with `shown: yes` or `shown: NO` plus the reason (the user tapped Skip or Later) |
 | **IGNORED** | The new values had a mistake (see *Table 2*). The last good values stay. |
