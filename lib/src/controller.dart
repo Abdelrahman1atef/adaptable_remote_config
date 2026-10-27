@@ -158,15 +158,17 @@ class RemoteConfigController extends ChangeNotifier {
   /// Loads the cached snapshot and the saved prompt answers.
   Future<void> _restore() async {
     try {
+      // The user's earlier Later / Skip answers come first: the first decision
+      // (and its log) must already know them.
+      final prompts = await storage.read(_promptsKey).timeout(requestTimeout);
+      _skipped = prompts?['skipped'] as String?;
+      _dismissed = prompts?['dismissed'] as String?;
+      _remindAt = DateTime.tryParse(prompts?['remind_at'] as String? ?? '');
       final cached = await storage.read(_cacheKey).timeout(requestTimeout);
       if (cached != null && !_disposed) {
         _logValues('RESTORED from the saved copy', cached);
         _accept(cached);
       }
-      final prompts = await storage.read(_promptsKey).timeout(requestTimeout);
-      _skipped = prompts?['skipped'] as String?;
-      _dismissed = prompts?['dismissed'] as String?;
-      _remindAt = DateTime.tryParse(prompts?['remind_at'] as String? ?? '');
     } catch (error, stack) {
       _report(error, stack);
     }
@@ -280,6 +282,19 @@ class RemoteConfigController extends ChangeNotifier {
       'remind_at': _remindAt?.toIso8601String(),
       'skipped': _skipped,
     });
+  }
+
+  /// Forgets every "Later" and "Skip this version" the user chose, so an
+  /// optional update is offered again. Useful in debug builds and in a
+  /// "show update reminders again" setting. A required update never needed it.
+  Future<void> forgetPromptAnswers() async {
+    _ensureAlive();
+    _skipped = null;
+    _dismissed = null;
+    _remindAt = null;
+    _logAction('Later / Skip answers forgotten');
+    _notify();
+    await _save(_promptsKey, {'dismissed': null, 'remind_at': null, 'skipped': null});
   }
 
   /// Opens the store. Neither outcome lifts a required-update block; the next
@@ -396,7 +411,23 @@ class RemoteConfigController extends ChangeNotifier {
         UpdateKind.required =>
           '=> WALL  (minimum ${result.version})  store: ${result.destination}',
       },
+      if (result.kind == UpdateKind.optional)
+        _hiddenBecause == null
+            ? '   shown: yes, the dialog will appear'
+            : '   shown: NO. $_hiddenBecause',
     ]);
+  }
+
+  /// Why an optional update is not shown to the user, or null when it is.
+  String? get _hiddenBecause {
+    if (_update.kind != UpdateKind.optional || shouldPrompt) return null;
+    if (_skipped == _update.version) {
+      return 'The user tapped "Skip this version" for ${_update.version}. '
+          'It stays hidden until a newer latest version is set '
+          '(or call forgetPromptAnswers()).';
+    }
+    return 'The user tapped "Later"; it comes back after $_remindAt '
+        '(or call forgetPromptAnswers()).';
   }
 
   void _notify() {
