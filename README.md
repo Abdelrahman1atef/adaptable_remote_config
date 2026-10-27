@@ -366,6 +366,10 @@ start the app, usually within an hour (Firebase keeps a copy for up to an hour).
 > **Careful:** Firebase has no test mode. A force-update value reaches **all** your
 > users. Test with the *optional* dialog first.
 
+> **Tested it once and now the dialog does not come back?** You probably tapped *Skip this version*
+> or *Later*, and the phone remembers it. Use a higher `android_latest_version` each time you test,
+> or call `AppUpdate.controller.forgetPromptAnswers()` once. The logs will say `shown: NO`.
+
 ## Two apps in one Firebase project? Give each app a prefix
 
 Many teams use **one** Firebase project for several apps (for example a *customer* app
@@ -668,6 +672,12 @@ The link is checked **only when a wall or dialog is about to show**.
 
 *Later* and *Skip* never hide the **wall**.
 
+**Later and Skip are remembered on the phone,** even after the app is closed. So a person (or a
+tester) who tapped *Skip this version* for `2.0.0` will **not** see the dialog for `2.0.0` again.
+A **newer** latest version (`2.0.1`) is offered right away. While testing, either use a higher
+version each time, or call `controller.forgetPromptAnswers()` to start fresh. The logs always say
+it: look for `shown: NO` under `=> DIALOG`.
+
 ### Table 6: when does the user get your change?
 
 | Situation | What happens |
@@ -869,7 +879,7 @@ What each box tells you:
 | --- | --- |
 | **FETCHED** | The keys and values that arrived, from which source, and how long it took |
 | **RESTORED from the saved copy** | The app used the values it saved last time (no internet) |
-| **DECISION** | Which keys were read for this phone, and what the user will see. This answers "why do I see this?" |
+| **DECISION** | Which keys were read for this phone, and what the user will see. This answers "why do I see this?" For a dialog it ends with `shown: yes` or `shown: NO` plus the reason (the user tapped Skip or Later) |
 | **IGNORED** | The new values had a mistake (see *Table 2*). The last good values stay. |
 | **ERROR** | Something failed, for example no internet |
 | **ACTION** | The user tapped *Update*, *Later* or *Skip* |
@@ -1063,6 +1073,7 @@ right, and nothing needs to be flipped by hand.
 
 | What you see | What to check |
 | --- | --- |
+| **The log says `=> DIALOG` but I never see the dialog** | Read the next line of the log: `shown: NO` tells you why. Almost always you (or a tester) already tapped **Skip this version** or **Later** on this phone, and the app remembers it. *Skip* hides that version for good, *Later* hides it for a day. To see the dialog again: set `android_latest_version` to a **newer** version (for example `1.0.6+6`), or call `AppUpdate.controller.forgetPromptAnswers()` once, or clear the app's data. Also check that your `UpdateGate` does not have `showOptional: false`. |
 | **Nothing shows** after I changed a value | 1. Did you press **Publish changes** (Firebase)? 2. Is your number **higher** than the installed version? 3. For the wall: is `force_update` **true**? 4. Close the app fully and open it again. |
 | **Firebase says it is not initialized** | `Firebase.initializeApp(...)` must run **before** the app first uses `AppUpdate.controller`. Put it first in `main()`. |
 | **The Update button does nothing** | Check the store link. On iOS it is required. It must start with `https://`. |

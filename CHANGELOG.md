@@ -1,3 +1,16 @@
+## 0.7.2
+
+- **The logs now say whether an optional dialog is really shown.** Under `=> DIALOG` the
+  decision box adds `shown: yes` or `shown: NO` with the reason: the user tapped *Skip this
+  version* (hidden until a newer latest version) or *Later* (hidden until the reminder time).
+  Before, the log said DIALOG even when an earlier Skip kept it hidden, which looked like a bug.
+- The saved Later / Skip answers are now loaded **before** the first decision, so the first
+  log and decision after a restart are already correct.
+- New `controller.forgetPromptAnswers()` clears every Later / Skip answer and saves that, for
+  debug builds and "show update reminders again" settings.
+- README: troubleshooting row, a note under the decision table, and a testing tip about
+  Later / Skip being remembered on the phone.
+
 ## 0.7.1
 
 - **Install is Flutter-first.** The package no longer declares an `executables:` entry, so the
