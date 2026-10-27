@@ -12,7 +12,7 @@ Sets up remote-controlled app updates (force / optional) in this Flutter app.
 Usage: dart run adaptable_remote_config [options]
 
   -y, --yes          No questions: Firebase, force + optional, Android + iOS
-  --source <name>    firebase | http | custom
+  --source <name>    firebase | http | custom | store
   --mode <name>      both | force | optional
   --url <url>        JSON file URL (with --source http)
   --prefix <name>    Name the keys <name>_android_version... (several apps, one project)
@@ -328,10 +328,12 @@ int runSetup(
         interactive: !yes,
       );
   if (!published) out.writeln('\n${remoteValuesGuide(answers)}');
-  out.writeln(
-    'The app already works with the defaults in lib/app_update.dart; the '
-    'values above let you change it later without a release.',
-  );
+  if (answers.source != ConfigSource.store) {
+    out.writeln(
+      'The app already works with the defaults in lib/app_update.dart; the '
+      'values above let you change it later without a release.',
+    );
+  }
   if (answers.appIcon.isEmpty) {
     out.writeln(
       'Tip: to show your app icon on the update screens, run again with '
@@ -660,18 +662,47 @@ SetupAnswers _collect(
           'Firebase Remote Config',
           ConfigSource.firebase,
           hint: 'edit them in the Firebase console',
+          provides: [
+            'Force and optional updates',
+            'Change a value in the console: no app release needed',
+            'Optional live updates while the app is open',
+            'Needs a Firebase project (flutterfire configure)',
+          ],
         ),
         Choice(
           'A JSON file / HTTP endpoint',
           ConfigSource.http,
           hint: 'host a file anywhere',
+          provides: [
+            'Force and optional updates',
+            'You edit one JSON file and host it anywhere (GitHub, your server)',
+            'No Firebase needed',
+          ],
         ),
         Choice(
           'My own code',
           ConfigSource.custom,
           hint: 'any async function that returns a map',
+          provides: [
+            'Force and optional updates',
+            'Values come from your own API or database',
+            'You write one small function',
+          ],
+        ),
+        Choice(
+          'The store itself',
+          ConfigSource.store,
+          hint: 'Google Play / App Store tell the app',
+          provides: [
+            'No server and nothing to edit: the store says what is newest',
+            'Optional updates on Android and iOS',
+            'Android can block old versions (Play update priority 4 or 5)',
+            'iOS cannot block, and the app must be published',
+            'Android only works for installs from Google Play',
+          ],
         ),
       ]);
+  final fromStore = source == ConfigSource.store;
 
   final mode = preset.mode ??
       ask.select<UpdateMode>('Which updates do you want?', const [
@@ -699,22 +730,27 @@ SetupAnswers _collect(
     throw const SetupAbort('--prefix: use lowercase letters, digits and underscores.');
   }
   final android = platforms.contains('android');
+  // The store method asks Google Play through in_app_update, so its Update
+  // button uses the same plugin.
   final playUpdate = android &&
-      (preset.playUpdate ??
-          ask.select<bool>('What should the Update button do on Android?', const [
-            Choice(
-              'Open the Play Store page',
-              false,
-              hint: 'works for every install',
-            ),
-            Choice(
-              'Google Play in-app update',
-              true,
-              hint: 'full-screen update inside the app; Play installs only',
-            ),
-          ]));
+      (fromStore ||
+          (preset.playUpdate ??
+              ask.select<bool>('What should the Update button do on Android?', const [
+                Choice(
+                  'Open the Play Store page',
+                  false,
+                  hint: 'works for every install',
+                ),
+                Choice(
+                  'Google Play in-app update',
+                  true,
+                  hint: 'full-screen update inside the app; Play installs only',
+                ),
+              ])));
 
-  final style = presetPrefix != null
+  final style = fromStore
+      ? KeyStyle.standard // the store provider writes the standard keys
+      : presetPrefix != null
       ? KeyStyle.prefixed
       : ask.select<KeyStyle>('How should the keys be named?', [
     const Choice(
@@ -801,10 +837,12 @@ SetupAnswers _collect(
     keyStyle: style,
     prefix: prefix,
     httpUrl: url,
-    androidStoreUrl: android
+    androidStoreUrl: android && !fromStore
         ? ask.input('Play Store link (Enter: derive from the package name)')
         : '',
-    iosStoreUrl: ios ? ask.input('App Store link (needed for iOS updates)') : '',
+    iosStoreUrl: ios && !fromStore
+        ? ask.input('App Store link (needed for iOS updates)')
+        : '',
     outputPath: outputPath,
     group: group,
     playUpdate: playUpdate,

@@ -9,6 +9,7 @@ export 'src/controller.dart';
 export 'src/logger.dart';
 export 'src/providers.dart';
 export 'src/storage.dart';
+export 'src/store_provider.dart';
 export 'src/update.dart';
 export 'src/values.dart';
 export 'src/widgets/update_gate.dart';

@@ -116,8 +116,23 @@ If there is nothing saved, it lets the user in. **It never blocks users by mista
 | **1. Firebase** | You already use Firebase, or you want the easiest way to edit values. | A Firebase project |
 | **2. A JSON file** | You do not use Firebase. You can put a small file on any website. | A place to host a file |
 | **3. Your own code** | You already have a backend API with app settings. | An API that returns settings |
+| **4. The store itself** | You do not want to run or edit anything. Google Play and the App Store already know the newest version. | An app published in the store |
 
 Not sure? Choose **Firebase**.
+
+### What each method gives you
+
+| | 1. Firebase | 2. JSON file | 3. Your own code | 4. The store itself |
+| --- | --- | --- | --- | --- |
+| **Who edits the values** | You, in the Firebase console | You, in one JSON file | Your backend | Nobody: the store knows |
+| **Optional update (dismissible dialog)** | Yes | Yes | Yes | Yes |
+| **Force update (blocking wall)** | Yes, any version | Yes, any version | Yes, any version | Android only, through Play update priority 4 or 5. Not on iOS |
+| **Change it without a new app release** | Yes | Yes | Yes | No: it follows what you release in the store |
+| **Works before the app is published** | Yes | Yes | Yes | No: the store must know the app |
+| **Works for sideloaded or debug builds** | Yes | Yes | Yes | No: Android needs a Google Play install |
+| **Live update while the app is open** | Optional (`subscribeToChanges`) | Only if you give a `changes` stream | Only if you give a `changes` stream | No |
+| **Extra setup** | `flutterfire configure` | A place to host a file | One small function | `in_app_update` (Android) |
+| **Decision-table values** | You set them | You set them | You set them | The store sets them for you |
 
 ---
 
@@ -135,7 +150,9 @@ Then it:
 1. Writes `lib/app_update.dart` (the controller).
 2. Wraps your `MaterialApp` with `UpdateGate`.
 3. For Firebase: starts Firebase in `main()`, and adds `firebase_core` if missing.
-4. For Firebase: creates the values in your Firebase project (it shows them first and asks).
+4. For the store method: adds `in_app_update` and writes the Google Play question for you.
+   There is nothing to create anywhere.
+5. For Firebase: creates the values in your Firebase project (it shows them first and asks).
    If you give the app a **prefix**, it puts the values in their own **folder** in the
    Firebase console (see *Two apps in one Firebase project* below).
 
@@ -152,7 +169,7 @@ More options:
 
 | Option | What it does |
 | --- | --- |
-| `--source firebase` (or `http`, `custom`) | Choose the method without being asked |
+| `--source firebase` (or `http`, `custom`, `store`) | Choose the method without being asked |
 | `--mode both` (or `force`, `optional`) | Choose the update types without being asked |
 | `--url https://...` | The JSON file address (for `http`) |
 | `--play-update` | Android: the Update button starts Google Play's own update screen (see *Let the store do the update*) |
@@ -312,7 +329,7 @@ class AppUpdate {
         'ios_store_link': '',
       },
     ),
-    subscribeToChanges: true,
+    // subscribeToChanges: true, // optional, off by default: see "How does a change ... reach the screen?"
   );
 }
 ```
@@ -423,7 +440,7 @@ Keys that already exist are never changed.
          'customer_ios_store_link': '',
        },
      ),
-     subscribeToChanges: true,
+     // subscribeToChanges: true, // optional, off by default
    );
    ```
 
@@ -582,6 +599,98 @@ the saved values). These names are the default names. You can use your own names
 
 Make your API return a higher `android_version` with `force_update: true`, or a higher
 `android_latest_version`. Close the app and open it again.
+
+---
+
+# Method 4: The store itself
+
+## What you need
+
+- The app is **published** in Google Play and/or the App Store.
+- Nothing else: no Firebase, no file to host, no backend.
+
+## What it gives you
+
+- The store says which version is newest. **You edit no values anywhere.**
+- An **optional update** (dismissible dialog) when the store has a newer version.
+- On Android, a **force update** too: when you release in Play Console with an update
+  **priority of 4 or 5**, old versions get the blocking wall.
+- It is **not** a way to block users on iOS: the App Store has no such field. For a wall on
+  iOS, use another method.
+
+## How it works
+
+- **Android** asks Google Play through the `in_app_update` plugin. Play answers with the
+  newest build number, and the package compares it with the installed one.
+- **iOS** asks the public App Store lookup (`itunes.apple.com/lookup?bundleId=...`) for the
+  newest version and the store page. No plugin is needed.
+- It uses the standard keys, so the [decision table](#what-will-the-user-see-the-decision-table)
+  applies: the store simply supplies `latest` (and `minimum` + `force_update` when Play
+  priority is 4 or 5).
+
+## Steps
+
+**1. Run the setup tool** and pick *The store itself*:
+
+```sh
+dart run adaptable_remote_config --source store
+```
+
+It adds `in_app_update` for Android and writes `lib/app_update.dart`. If you prefer to do it
+by hand:
+
+```sh
+flutter pub add in_app_update
+```
+
+**2. `lib/app_update.dart`:**
+
+```dart
+import 'package:adaptable_remote_config/adaptable_remote_config.dart';
+import 'package:in_app_update/in_app_update.dart';
+
+class AppUpdate {
+  AppUpdate._();
+
+  static final RemoteConfigController controller = RemoteConfigController(
+    appId: 'my_app',
+    provider: StoreConfigProvider(
+      android: _playRelease,
+      // country: 'us', // the App Store country the app is sold in
+    ),
+  );
+
+  /// What Google Play says about the newest release (null: nothing newer, or
+  /// the app was not installed from Google Play).
+  static Future<StoreRelease?> _playRelease() async {
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      final build = info.availableVersionCode;
+      if (info.updateAvailability != UpdateAvailability.updateAvailable ||
+          build == null) {
+        return null;
+      }
+      return StoreRelease.build(build, force: info.updatePriority >= 4);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+```
+
+For iOS only, `StoreConfigProvider()` is enough (leave out `android:`).
+
+**3. Wrap your app with `UpdateGate`** (same as the other methods).
+
+## Test it
+
+- A build from `flutter run` or an APK file is **not** a Google Play install, so Android
+  sees "no update". Test with an **internal testing track** in Play Console: install
+  version 1, upload version 2, open version 1.
+- On iOS, the lookup finds the app by its bundle id, so it shows nothing until the app is
+  in the App Store. If the store is in another country, pass `country: 'eg'` (and so on).
+- Want to try the screens without a store? Use the example app, or switch to Method 2 for
+  a quick test.
 
 ---
 
@@ -803,7 +912,7 @@ for that push. In order:
 
 1. You press **Publish changes** in the Firebase console.
 2. Firebase tells the apps that are open: *"the config changed"* (real-time Remote Config).
-3. The package, with `subscribeToChanges: true`, **fetches and applies** the new values.
+3. The package, **only if you turned on `subscribeToChanges: true`** (it is off by default), **fetches and applies** the new values.
 4. The controller decides again (nothing, dialog or wall).
 5. If the decision changed, the controller tells `UpdateGate`, which **redraws at once**.
    No restart. No new app release.
@@ -1100,9 +1209,10 @@ right, and nothing needs to be flipped by hand.
 
 **Controller options:** `appId`, `provider`, `keys`, `defaults`, `storage`, `comparator`,
 `openStore`, `inAppUpdate`, `startupWait`, `requestTimeout`, `refreshInterval`,
-`remindAfter`, `subscribeToChanges`, `onError`, `log`.
+`remindAfter`, `subscribeToChanges` (default `false`), `onError`, `log`.
 
-**Sources:** `FirebaseConfigProvider`, `HttpConfigProvider`, `CustomConfigProvider`.
+**Sources:** `FirebaseConfigProvider`, `HttpConfigProvider`, `CustomConfigProvider`,
+`StoreConfigProvider` (with `StoreRelease`).
 Make your own by extending `RemoteConfigProvider` (one method: `fetch()`).
 
 **Building blocks:** `UpdateGate`, `RequiredUpdatePage`, `OptionalUpdateDialog`,

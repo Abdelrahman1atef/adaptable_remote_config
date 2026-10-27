@@ -260,12 +260,35 @@ void main() {
   });
 
   group('appUpdateSource', () {
-    test('Firebase lists defaults and listens for changes', () {
+    test('the store method asks Play (Android) and the App Store (iOS)', () {
+      final both = appUpdateSource(answers(source: ConfigSource.store));
+      expect(both, contains('StoreConfigProvider('));
+      expect(both, contains('android: _playRelease,'));
+      expect(both, contains('static Future<StoreRelease?> _playRelease()'));
+      expect(both, isNot(contains('FirebaseConfigProvider')));
+
+      final iosOnly = appUpdateSource(
+        answers(source: ConfigSource.store, android: false),
+      );
+      expect(iosOnly, contains('StoreConfigProvider('));
+      expect(iosOnly, isNot(contains('_playRelease')));
+      expect(iosOnly, isNot(contains('in_app_update')));
+    });
+
+    test('the store method has nothing to create, and says what it can do', () {
+      final guide = remoteValuesGuide(answers(source: ConfigSource.store));
+      expect(guide, contains('Nothing to create'));
+      expect(guide, contains('update priority of 4 or 5'));
+      expect(guide, contains('optional update only'));
+    });
+
+    test('Firebase lists defaults; live changes are off unless you opt in', () {
       final source = appUpdateSource(answers(ios: false));
       expect(source, contains('FirebaseConfigProvider('));
       expect(source, contains("'android_version': '1.0.0+1',"));
       expect(source, contains("'force_update': false,"));
-      expect(source, contains('subscribeToChanges: true'));
+      expect(source, contains('// subscribeToChanges: true,'));
+      expect(source, isNot(contains('\n    subscribeToChanges: true')));
       expect(source, isNot(contains('keys:')));
     });
 
@@ -396,6 +419,35 @@ void main() {
       expect(source, contains("'shop_app_android_version'"));
       expect(out.toString(), contains('package:shop_app/app_update.dart'));
       expect(out.toString(), isNot(contains('add firebase_core')));
+    });
+
+    test('the store method skips the key, link and button questions', () {
+      final out = StringBuffer();
+      final added = <String>[];
+      final code = runSetup(
+        ScriptedPrompter([
+          3, // the store itself
+          0, // force and optional
+          [0, 1], // android + iOS
+          '', // app id -> app name
+          '', // app icon -> none
+          true, // add in_app_update
+        ]),
+        out,
+        projectDir: dir,
+        addDependency: (_, name) {
+          added.add(name);
+          return true;
+        },
+      );
+      expect(code, 0);
+      final source = File('${dir.path}/lib/app_update.dart').readAsStringSync();
+      expect(source, contains('StoreConfigProvider('));
+      expect(source, contains('inAppUpdate: _playUpdate,'));
+      expect(source, isNot(contains('keys:')));
+      expect(added, ['in_app_update']);
+      expect(out.toString(), contains('Nothing to create'));
+      expect(out.toString(), isNot(contains('works with the defaults')));
     });
 
     test('asks before overwriting and can keep the old file', () {

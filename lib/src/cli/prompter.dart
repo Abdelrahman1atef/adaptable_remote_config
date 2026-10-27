@@ -4,11 +4,15 @@ import 'windows_console.dart';
 
 /// One selectable option.
 class Choice<T> {
-  const Choice(this.label, this.value, {this.hint = ''});
+  const Choice(this.label, this.value, {this.hint = '', this.provides = const []});
 
   final String label;
   final T value;
   final String hint;
+
+  /// What this option gives you, one short line each. The menu lists them under
+  /// the option the cursor is on.
+  final List<String> provides;
 }
 
 /// Asks the questions. The terminal version is below; tests use a scripted one.
@@ -135,8 +139,13 @@ class TerminalPrompter implements Prompter {
         final hint = options[i].hint.isEmpty ? '' : ' $_dim${options[i].hint}$_reset';
         final line = '${on ? '>' : ' '} $mark${options[i].label}';
         _out.writeln(on ? '$_cyan$line$_reset$hint' : '$line$hint');
+        if (on) {
+          for (final item in options[i].provides) {
+            _out.writeln('      $_dim+ $item$_reset');
+          }
+        }
       }
-      drawn = options.length + 1;
+      drawn = options.length + 1 + options[cursor].provides.length;
     }
 
     try {
@@ -250,6 +259,9 @@ class TerminalPrompter implements Prompter {
     for (var i = 0; i < options.length; i++) {
       final hint = options[i].hint.isEmpty ? '' : '  (${options[i].hint})';
       _out.writeln('  ${i + 1}) ${options[i].label}$hint');
+      for (final item in options[i].provides) {
+        _out.writeln('       + $item');
+      }
     }
     final fallback = (start.toList()..sort()).map((i) => i + 1).join(',');
     final prompt = multi ? 'numbers, comma separated' : 'number';

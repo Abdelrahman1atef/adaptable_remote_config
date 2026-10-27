@@ -1,5 +1,5 @@
 /// Where the remote values come from.
-enum ConfigSource { firebase, http, custom }
+enum ConfigSource { firebase, http, custom, store }
 
 /// Which kinds of update the app supports.
 enum UpdateMode { both, forceOnly, optionalOnly }

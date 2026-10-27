@@ -33,6 +33,22 @@ const _options = [
 ];
 
 void main() {
+  test('the option under the cursor lists what it provides', () {
+    const options = [
+      Choice('One', 1, provides: ['gives A', 'gives B']),
+      Choice('Two', 2, provides: ['gives C']),
+    ];
+    final t = _terminal([_down, _enter]);
+    expect(t.prompter.select('?', options), 2);
+    final text = t.out.toString();
+    expect(text, contains('+ gives A'));
+    expect(text, contains('+ gives C'));
+    // The last redraw before Enter shows only the highlighted option's lines.
+    final lastDraw = text.split('[J').reversed.skip(1).first;
+    expect(lastDraw, contains('gives C'));
+    expect(lastDraw, isNot(contains('gives A')));
+  });
+
   test('Enter picks the highlighted default', () {
     final t = _terminal([_enter]);
     expect(t.prompter.select('Source?', _options), 'firebase');

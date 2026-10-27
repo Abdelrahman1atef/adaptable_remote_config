@@ -1,3 +1,16 @@
+## 0.8.0
+
+- **New method 4: the store itself.** `StoreConfigProvider` asks the store for the newest
+  version, so there is nothing to edit and no server: Google Play on Android (through a
+  function you pass, the wizard writes it with `in_app_update`) and the App Store lookup on
+  iOS. Optional updates on both; on Android a Play update priority of 4 or 5 becomes a
+  blocking update. New `StoreRelease`. Wizard: `--source store`.
+- **The setup menu says what each method provides**: the option under the cursor lists what
+  it gives you (force, optional, no release needed, extra setup). The README has the same
+  comparison table.
+- **`subscribeToChanges` is off in the generated file.** It was already `false` in the
+  controller; the wizard no longer writes `true` for Firebase, it adds a commented line.
+
 ## 0.7.3
 
 - **The FETCHED log marks keys that are not on the server.** With Firebase, a key you deleted
